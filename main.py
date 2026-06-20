@@ -320,6 +320,20 @@ def get_manifest():
         return FileResponse("manifest.json", media_type="application/manifest+json")
     return {"error": "Manifest not found"}
 
+@app.get("/icon-192x192.png")
+def get_icon_192():
+    import os
+    if os.path.exists("static/icon-192x192.png"):
+        return FileResponse("static/icon-192x192.png", media_type="image/png")
+    return {"error": "Icon not found"}
+
+@app.get("/icon-512x512.png")
+def get_icon_512():
+    import os
+    if os.path.exists("static/icon-512x512.png"):
+        return FileResponse("static/icon-512x512.png", media_type="image/png")
+    return {"error": "Icon not found"}
+
 # Dependencia para obtener la conexión de base de datos
 def get_db():
     if IS_POSTGRES:

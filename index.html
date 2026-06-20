@@ -43,6 +43,17 @@
             --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.4);
         }
 
+        body.dark-mode .input-control {
+            color: #FFFFFF !important;
+            background-color: rgba(30, 20, 35, 0.8) !important;
+            border-color: #A885EE !important;
+        }
+
+        body.dark-mode .input-control::placeholder {
+            color: #E8DFF5;
+            opacity: 0.6;
+        }
+
         .active-theme-btn {
             background-color: var(--accent-purple) !important;
             color: white !important;
@@ -992,7 +1003,14 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="dia_del_ciclo">Día del Ciclo Menstrual 🔄</label>
+                    <label for="dia_del_ciclo" style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <span>Día del Ciclo Menstrual 🔢</span>
+                        <a href="#" onclick="toggleCalculadoraDias(event)" style="font-size: 0.8rem; color: var(--accent-purple); text-decoration: none;">¿No recuerdas tu día? ¡Haz clic aquí! ✨</a>
+                    </label>
+                    <div id="calculadoraDiasContainer" style="display: none; background: rgba(178, 141, 255, 0.1); padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px dashed var(--accent-purple);">
+                        <label for="fechaUltimoPeriodo" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 5px;">¿Cuándo empezó tu último periodo?</label>
+                        <input type="date" id="fechaUltimoPeriodo" class="input-control" style="padding: 8px; font-size: 0.9rem;" onchange="calcularDiaCiclo()">
+                    </div>
                     <input type="number" id="dia_del_ciclo" class="input-control" min="1" max="40" placeholder="Ej: 3" required>
                 </div>
 
@@ -1401,6 +1419,36 @@
                     } catch (error) {
                         showNotification("Error de conexión.", "error");
                     }
+                }
+            }
+        }
+        
+        // --- ASISTENTE DE USUARIAS NUEVAS ---
+        function toggleCalculadoraDias(e) {
+            e.preventDefault();
+            const container = document.getElementById("calculadoraDiasContainer");
+            container.style.display = container.style.display === "none" ? "block" : "none";
+        }
+        
+        function calcularDiaCiclo() {
+            const fechaDiario = document.getElementById("fecha").value;
+            const fechaUltimo = document.getElementById("fechaUltimoPeriodo").value;
+            
+            if (fechaDiario && fechaUltimo) {
+                const dateDiario = new Date(fechaDiario);
+                const dateUltimo = new Date(fechaUltimo);
+                
+                // Reset time to properly calculate day diff
+                dateDiario.setUTCHours(0,0,0,0);
+                dateUltimo.setUTCHours(0,0,0,0);
+                
+                const diffTime = dateDiario - dateUltimo;
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                
+                if (diffDays > 0) {
+                    document.getElementById("dia_del_ciclo").value = diffDays;
+                    // Optional: hide the assistant after calculation
+                    document.getElementById("calculadoraDiasContainer").style.display = "none";
                 }
             }
         }
