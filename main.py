@@ -323,15 +323,15 @@ def get_manifest():
 @app.get("/icon-192x192.png")
 def get_icon_192():
     import os
-    if os.path.exists("static/icon-192x192.png"):
-        return FileResponse("static/icon-192x192.png", media_type="image/png")
+    if os.path.exists("icon-192x192.png"):
+        return FileResponse("icon-192x192.png", media_type="image/png")
     return {"error": "Icon not found"}
 
 @app.get("/icon-512x512.png")
 def get_icon_512():
     import os
-    if os.path.exists("static/icon-512x512.png"):
-        return FileResponse("static/icon-512x512.png", media_type="image/png")
+    if os.path.exists("icon-512x512.png"):
+        return FileResponse("icon-512x512.png", media_type="image/png")
     return {"error": "Icon not found"}
 
 # Dependencia para obtener la conexión de base de datos
@@ -788,8 +788,9 @@ def obtener_consejos(dia_del_ciclo: int):
         )
         
     system_instruction = (
-        "Actúas como Lunita, una experta en salud hormonal femenina, ginecología natural y nutrición cíclica. "
-        "Tu tono es extremadamente dulce, empático y kawaii, pero tus fundamentos son científicos y de bienestar real. "
+        "Actúas como Lunita, una asistente inteligente experta en salud hormonal femenina y nutrición cíclica. "
+        "Tu tono es empático, cercano, sutilmente tierno y amigable, pero mantienes una base estrictamente informativa, clara y científica. "
+        "Evita adjetivos excesivamente empalagosos o maternales (como preciosa, hermosa, etc.). Tu prioridad es entregar valor de forma directa. "
         "Debes devolver estrictamente un JSON válido con esta estructura exacta: "
         '{"nutricion": "qué comer específicamente para balancear las hormonas de ese día", '
         '"movimiento": "ejercicio adecuado según la energía del momento", '
@@ -875,10 +876,10 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
 
     # 3. Construir el prompt para Gemini
     system_instruction = (
-        "Eres una consejera de bienestar menstrual muy empática, dulce y enfocada en nutrición, autocuidado y salud mental. "
-        "NO eres un médico y NUNCA debes hablar sobre temas de fertilidad o embarazo. "
-        "Tu objetivo es dar una respuesta corta (máximo 3-4 líneas), en tono de amiga cercana, usando emojis kawaii. "
-        "Analiza el contexto de la usuaria y ofrécele un consejo muy puntual y amoroso."
+        "Eres una consejera de bienestar menstrual empática, cercana y enfocada en nutrición y salud mental. "
+        "Te comunicas en un tono de amiga comprensiva y sutilmente tierno, usando emojis de forma moderada. "
+        "Tu objetivo es dar una respuesta corta, directa y de apoyo, evitando halagos exagerados o palabras empalagosas. "
+        "No hables sobre fertilidad o embarazo."
     )
     
     user_prompt = (
