@@ -1,2 +1,11 @@
-psycopg2-binary
+fastapi
+python-multipart
+passlib[bcrypt]
+python-jose[jwt]
 google-genai
+python-dotenv
+psycopg2-binary
+fastapi-mail
+jinja2
+weasyprint
+uvicorn
