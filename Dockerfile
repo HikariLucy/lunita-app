@@ -1,16 +1,15 @@
+# Usamos una versión ligera de Python
 FROM python:3.10-slim
 
+# Le decimos al servidor dónde trabajar
 WORKDIR /app
 
-# Instalar dependencias
+# Copiamos primero los requerimientos e instalamos
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código de la aplicación
+# Copiamos el resto de tu código
 COPY . .
 
-# Exponer el puerto
-EXPOSE 8000
-
-# Comando para iniciar la aplicación
-CMD sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
+# La instrucción mágica: llama a uvicorn a través de python -m y usa el puerto de Render
+CMD sh -c "python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
