@@ -9,10 +9,55 @@ from collections import Counter
 from dotenv import load_dotenv
 from google import genai
 from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi import Request
+import bcrypt
+from jose import JWTError, jwt
+from pydantic import BaseModel, Field, field_validator, EmailStr
+from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
+import io
+
+# Cargar variables de entorno
+load_dotenv()
+
+# Configurar Gemini
+client = None
+if os.getenv("GEMINI_API_KEY"):
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+# Configuración Base de Datos
+DATABASE_NAME = "lunita.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+IS_POSTGRES = bool(DATABASE_URL)
+
+def ejecutar_query(cursor, query, params=()):
+    if IS_POSTGRES:
+        query = query.replace("?", "%s")
+    cursor.execute(query, params)
+import os
+import sqlite3
+import psycopg2
+from psycopg2.extras import DictCursor
+from datetime import date, datetime, timedelta
+from typing import List, Optional
+from collections import Counter
+
+from dotenv import load_dotenv
+from google import genai
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from fastapi import Request
 import bcrypt
 from jose import JWTError, jwt
@@ -51,7 +96,8 @@ def init_db():
                         id SERIAL PRIMARY KEY,
                         username TEXT UNIQUE NOT NULL,
                         email TEXT UNIQUE NOT NULL,
-                        hashed_password TEXT NOT NULL
+                        hashed_password TEXT NOT NULL,
+                        es_irregular BOOLEAN DEFAULT FALSE
                     )
                 """)
                 
@@ -68,6 +114,14 @@ def init_db():
                     )
                 """)
                 conn.commit()
+                
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("ALTER TABLE usuarios ADD COLUMN es_irregular BOOLEAN DEFAULT FALSE")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                
         return
     else:
         conn = sqlite3.connect(DATABASE_NAME)
@@ -79,9 +133,15 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             email TEXT UNIQUE NOT NULL,
-            hashed_password TEXT NOT NULL
+            hashed_password TEXT NOT NULL,
+            es_irregular BOOLEAN DEFAULT FALSE
         )
     """)
+    
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN es_irregular BOOLEAN DEFAULT FALSE")
+    except sqlite3.OperationalError:
+        pass
 
     # Migrar registros_diarios para soportar multi-usuario y evitar colisiones de fechas
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='registros_diarios_v2'")
@@ -127,22 +187,124 @@ app.add_middleware(
 
 templates = Jinja2Templates(directory=".")
 
+import os
+os.makedirs("static", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+import asyncio
+import random
+from datetime import date, timedelta
+
+def crear_datos_demo(db):
+    cursor = db.cursor()
+    ejecutar_query(cursor, "SELECT * FROM usuarios WHERE username = 'lunita'")
+    user = cursor.fetchone()
+    
+    if not user:
+        hashed_password = get_password_hash('lunita')
+        ejecutar_query(cursor, "INSERT INTO usuarios (username, email, hashed_password) VALUES (?, ?, ?)", 
+                       ('lunita', 'lunita@demo.com', hashed_password))
+        db.commit()
+        # Handle postgres id retrieval
+        if IS_POSTGRES:
+            ejecutar_query(cursor, "SELECT id FROM usuarios WHERE username = 'lunita'")
+            user_id = cursor.fetchone()[0]
+        else:
+            user_id = cursor.lastrowid
+    else:
+        user_id = user["id"]
+        
+    ejecutar_query(cursor, "DELETE FROM registros_diarios WHERE user_id = ?", (user_id,))
+    db.commit()
+    
+    hoy = date.today()
+    inicio_ciclo_actual = hoy - timedelta(days=13)
+    inicio_ciclo_anterior = inicio_ciclo_actual - timedelta(days=28)
+    inicio_ciclo_muy_anterior = inicio_ciclo_anterior - timedelta(days=28)
+    
+    sintomas_pool = ["Ninguno", "Cólicos", "Sensibilidad en el pecho", "Dolor de cabeza", "Inflamación", "Antojos dulces"]
+    
+    for i in range(60, -1, -1):
+        fecha_registro = hoy - timedelta(days=i)
+        
+        if fecha_registro >= inicio_ciclo_actual:
+            dia_del_ciclo = (fecha_registro - inicio_ciclo_actual).days + 1
+        elif fecha_registro >= inicio_ciclo_anterior:
+            dia_del_ciclo = (fecha_registro - inicio_ciclo_anterior).days + 1
+        else:
+            dia_del_ciclo = (fecha_registro - inicio_ciclo_muy_anterior).days + 1
+            
+        flujo = "Ninguno"
+        if 1 <= dia_del_ciclo <= 2:
+            flujo = "Abundante"
+        elif 3 <= dia_del_ciclo <= 4:
+            flujo = "Moderado"
+        elif dia_del_ciclo == 5:
+            flujo = "Ligero"
+            
+        if 1 <= dia_del_ciclo <= 5:
+            animo = random.choice(["Cansada", "Triste", "Sensible"])
+        elif 6 <= dia_del_ciclo <= 11:
+            animo = random.choice(["Feliz", "Enérgica", "Motivada"])
+        elif 12 <= dia_del_ciclo <= 16:
+            animo = random.choice(["Enérgica", "Feliz", "Radiante"])
+        elif 17 <= dia_del_ciclo <= 23:
+            animo = random.choice(["Normal", "Tranquila", "Cansada"])
+        else:
+            animo = random.choice(["Irritable", "Sensible", "Triste", "Cansada"])
+            
+        if flujo != "Ninguno" and random.random() < 0.7:
+            sintomas = "Cólicos"
+        elif dia_del_ciclo > 24 and random.random() < 0.6:
+            sintomas = random.choice(["Inflamación", "Antojos dulces", "Sensibilidad en el pecho"])
+        else:
+            sintomas = "Ninguno" if random.random() < 0.8 else random.choice(sintomas_pool)
+            
+        ejecutar_query(cursor, 
+            """
+            INSERT INTO registros_diarios (fecha, dia_del_ciclo, flujo, animo, sintomas, user_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                fecha_registro.isoformat(),
+                dia_del_ciclo,
+                flujo,
+                animo,
+                sintomas,
+                user_id
+            )
+        )
+    db.commit()
+    print("Datos demo de 'lunita' regenerados exitosamente.")
+
+async def reset_demo_user_loop():
+    while True:
+        try:
+            if IS_POSTGRES:
+                conn = psycopg2.connect(DATABASE_URL)
+                conn.cursor_factory = DictCursor
+            else:
+                conn = sqlite3.connect(DATABASE_NAME)
+                conn.row_factory = sqlite3.Row
+                
+            try:
+                crear_datos_demo(conn)
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"Error resetting demo user: {e}")
+            
+        await asyncio.sleep(12 * 3600) # 12 horas
+
 # Ejecutar la creación de tablas al iniciar la aplicación
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     init_db()
+    asyncio.create_task(reset_demo_user_loop())
 
 @app.get("/")
 def raiz():
-    return {
-        "mensaje": "¡Te damos la bienvenida a Lunita API! 🌙",
-        "descripcion": "API enfocada en bienestar, nutrición y salud mental para el ciclo menstrual.",
-        "documentacion": "/docs",
-        "endpoints": {
-            "registros": "/api/registros",
-            "consejos": "/api/consejos/{dia_del_ciclo}"
-        }
-    }
+    return FileResponse('index.html')
 
 @app.get("/app", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
@@ -241,6 +403,7 @@ class UserCreate(BaseModel):
     username: str
     email: str
     password: str
+    es_irregular: bool = False
 
 class Token(BaseModel):
     access_token: str
@@ -258,8 +421,8 @@ def crear_usuario(user: UserCreate, db: sqlite3.Connection = Depends(get_db)):
     
     hashed_password = get_password_hash(user.password)
     try:
-        ejecutar_query(cursor, "INSERT INTO usuarios (username, email, hashed_password) VALUES (?, ?, ?)", 
-                       (user.username, user.email, hashed_password))
+        ejecutar_query(cursor, "INSERT INTO usuarios (username, email, hashed_password, es_irregular) VALUES (?, ?, ?, ?)", 
+                       (user.username, user.email, hashed_password, user.es_irregular))
         db.commit()
         return {"mensaje": "Usuario creado exitosamente 🌸"}
     except sqlite3.Error:
@@ -586,53 +749,87 @@ def eliminar_registro(registro_id: int, db: sqlite3.Connection = Depends(get_db)
             detail=f"Error al eliminar el registro: {str(e)}"
         )
 
+@app.delete("/api/registros")
+def borrar_todos_los_registros(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    cursor = db.cursor()
+    try:
+        ejecutar_query(cursor, "DELETE FROM registros_diarios WHERE user_id = ?", (current_user["id"],))
+        db.commit()
+        return {"mensaje": "Todos los registros han sido borrados mágicamente."}
+    except sqlite3.Error as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al borrar los registros."
+        )
+
 # --- Endpoint Especial: Consejos por día del ciclo ---
 
 @app.get("/api/consejos/{dia_del_ciclo}")
 def obtener_consejos(dia_del_ciclo: int):
-    # Validar que el día del ciclo sea un valor válido
     if dia_del_ciclo < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El día del ciclo debe ser un número entero mayor o igual a 1."
         )
         
-    # Clasificación de fases y recomendaciones orientadas a bienestar, nutrición y salud mental
-    if 1 <= dia_del_ciclo <= 5:
-        fase = "Menstrual"
-        consejos = {
-            "alimentacion": "Prioriza alimentos calientes y de fácil digestión. Consume vegetales de hoja verde oscura, lentejas y semillas de calabaza ricos en hierro para compensar la pérdida de sangre. Añade jengibre o cúrcuma en infusiones para reducir la inflamación.",
-            "ejercicio": "Tu cuerpo está usando mucha energía hacia el interior. Opta por actividades de muy baja intensidad como yoga restaurativo, estiramientos suaves o caminatas lentas. Evita esfuerzos intensos si te sientes cansada.",
-            "salud_mental": "Es una fase ideal para la introspección y el descanso. Practica la autocompasión, disminuye tu lista de pendientes si es posible, medita y prioriza el sueño de calidad."
-        }
-    elif 6 <= dia_del_ciclo <= 13:
-        fase = "Folicular"
-        consejos = {
-            "alimentacion": "A medida que sube el estrógeno, tu energía aumenta. Incorpora carbohidratos complejos (avena, quinoa), grasas saludables (aguacate, nueces) y alimentos fermentados (yogur, kéfir) para apoyar la metabolización del estrógeno.",
-            "ejercicio": "Aprovecha la energía ascendente. Es un buen momento para entrenamientos de fuerza moderada, ejercicios aeróbicos (correr, andar en bicicleta) y clases dinámicas. Te recuperarás más rápido.",
-            "salud_mental": "Tu cerebro está predispuesto a la creatividad, el aprendizaje y la planificación. Es un gran momento para iniciar proyectos, resolver problemas complejos y programar reuniones importantes."
-        }
-    elif 14 <= dia_del_ciclo <= 16:
-        fase = "Ovulación"
-        consejos = {
-            "alimentacion": "Consume alimentos ricos en antioxidantes como bayas, verduras crucíferas (brócoli, coles de Bruselas) y pescado azul rico en omega-3 para apoyar la salud celular y el equilibrio hormonal. Mantente muy bien hidratada.",
-            "ejercicio": "Momento de máxima energía física. Ideal para entrenamientos de alta intensidad (HIIT), fuerza pesada, o deportes competitivos y demandantes.",
-            "salud_mental": "Los niveles altos de estrógeno y testosterona favorecen la sociabilidad, la comunicación y la confianza. Aprovecha para socializar, realizar presentaciones públicas o tener conversaciones importantes."
-        }
-    else:  # dia_del_ciclo >= 17
-        fase = "Lútea"
-        # Recomendaciones adaptadas a la fase lútea, subdividiendo mentalmente si se aproxima el síndrome premenstrual
-        consejos = {
-            "alimentacion": "Para mitigar los antojos y la retención de líquidos, prioriza grasas saludables y alimentos ricos en magnesio (cacao puro, plátanos, espinacas) y vitamina B6. Reduce el consumo de cafeína, sal y azúcares refinados.",
-            "ejercicio": "La energía irá disminuyendo progresivamente. Haz una transición hacia actividades de intensidad moderada a baja como pilates, caminatas al aire libre o natación suave. Escucha a tu cuerpo y baja el ritmo si lo pide.",
-            "salud_mental": "Es normal experimentar fluctuaciones de ánimo o mayor sensibilidad. Practica el establecimiento de límites saludables, realiza actividades que te calmen (lectura, baños templados, escritura reflexiva) y reduce el estrés."
-        }
+    system_instruction = (
+        "Actúas como Lunita, una experta en salud hormonal femenina, ginecología natural y nutrición cíclica. "
+        "Tu tono es extremadamente dulce, empático y kawaii, pero tus fundamentos son científicos y de bienestar real. "
+        "Debes devolver estrictamente un JSON válido con esta estructura exacta: "
+        '{"nutricion": "qué comer específicamente para balancear las hormonas de ese día", '
+        '"movimiento": "ejercicio adecuado según la energía del momento", '
+        '"salud_mental": "consejo zen de autocuidado"}'
+    )
+    
+    user_prompt = f"Genera los consejos mágicos para el día {dia_del_ciclo} del ciclo menstrual."
 
-    return {
-        "dia_del_ciclo": dia_del_ciclo,
-        "fase": fase,
-        "consejos": consejos
-    }
+    try:
+        if not client:
+            raise Exception("No se pudo instanciar el cliente de Gemini.")
+            
+        prompt = system_instruction + "\n\n" + user_prompt
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        
+        texto = response.text.strip()
+        if texto.startswith("```json"):
+            texto = texto[7:]
+        if texto.endswith("```"):
+            texto = texto[:-3]
+            
+        import json
+        consejos_json = json.loads(texto.strip())
+        
+        if 1 <= dia_del_ciclo <= 5: fase = "Menstrual"
+        elif 6 <= dia_del_ciclo <= 13: fase = "Folicular"
+        elif 14 <= dia_del_ciclo <= 16: fase = "Ovulación"
+        else: fase = "Lútea"
+
+        return {
+            "dia_del_ciclo": dia_del_ciclo,
+            "fase": fase,
+            "consejos": consejos_json
+        }
+    except Exception as e:
+        print(f"Error generando consejos con Gemini: {e}")
+        # Fallback de emergencia
+        if 1 <= dia_del_ciclo <= 5: fase = "Menstrual"
+        elif 6 <= dia_del_ciclo <= 13: fase = "Folicular"
+        elif 14 <= dia_del_ciclo <= 16: fase = "Ovulación"
+        else: fase = "Lútea"
+        
+        return {
+            "dia_del_ciclo": dia_del_ciclo,
+            "fase": fase,
+            "consejos": {
+                "nutricion": "Escucha a tu cuerpo y mantente muy hidratada. 🍵",
+                "movimiento": "Muévete a tu propio ritmo, honrando tu energía de hoy. 🧘‍♀️",
+                "salud_mental": "Sé muy amable y compasiva contigo misma. ✨"
+            }
+        }
 
 @app.get("/api/consejera")
 def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -722,4 +919,117 @@ def obtener_notificaciones(db: sqlite3.Connection = Depends(get_db), current_use
         
     return notificaciones
 
+@app.get("/api/estado_actual")
+def obtener_estado_actual(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    cursor = db.cursor()
+    ejecutar_query(cursor, """
+        SELECT fecha, dia_del_ciclo FROM registros_diarios 
+        WHERE user_id = ? 
+        ORDER BY fecha DESC LIMIT 1
+    """, (current_user["id"],))
+    row = cursor.fetchone()
+    
+    if not row:
+        return {
+            "dia": 1, 
+            "fase": "Menstrual 🩸", 
+            "emoji": "🌑", 
+            "mensaje": "Empieza a registrar tus días para conectar con tu ciclo. ✨", 
+            "porcentaje": 0
+        }
+        
+    from datetime import date
+    fecha_ultimo_str = row["fecha"]
+    dia_ultimo = int(row["dia_del_ciclo"])
+    fecha_ultimo = date.fromisoformat(fecha_ultimo_str)
+    
+    diferencia_dias = (date.today() - fecha_ultimo).days
+    dia_actual = dia_ultimo + diferencia_dias
+    
+    if dia_actual < 1:
+        dia_actual = 1
+        
+    if 1 <= dia_actual <= 5:
+        fase = "Menstrual"
+        emoji = "🌑"
+        mensaje = "Energía de introspección, ideal para descansar y conectar contigo."
+    elif 6 <= dia_actual <= 11:
+        fase = "Folicular"
+        emoji = "🌙"
+        mensaje = "Energía al alza y creatividad. ¡Aprovecha para iniciar proyectos!"
+    elif 12 <= dia_actual <= 16:
+        fase = "Ovulatoria"
+        emoji = "🌕"
+        mensaje = "Tu energía está al máximo, ¡es un gran día para brillar y socializar! ✨"
+    else:
+        fase = "Lútea"
+        emoji = "🌘"
+        mensaje = "Tiempo de autocuidado y calma. Escucha a tu cuerpo y baja el ritmo."
+        
+    porcentaje = min((dia_actual / 28) * 100, 100)
+    
+    return {
+        "dia": dia_actual,
+        "fase": fase,
+        "emoji": emoji,
+        "mensaje": mensaje,
+        "porcentaje": porcentaje
+    }
 
+@app.get("/api/prediccion")
+def obtener_prediccion(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    cursor = db.cursor()
+    ejecutar_query(cursor, "SELECT fecha, dia_del_ciclo FROM registros_diarios WHERE user_id = ? ORDER BY fecha ASC", (current_user["id"],))
+    rows = cursor.fetchall()
+    
+    if not rows:
+        return {"fechas": []}
+        
+    fechas_inicio = []
+    from datetime import date, timedelta
+    
+    for row in rows:
+        try:
+            fecha_str = row["fecha"]
+            dia = int(row["dia_del_ciclo"])
+            fecha_obj = date.fromisoformat(fecha_str)
+            inicio_estimado = fecha_obj - timedelta(days=dia - 1)
+            
+            if not fechas_inicio:
+                fechas_inicio.append(inicio_estimado)
+            else:
+                ultimo_inicio = fechas_inicio[-1]
+                if abs((inicio_estimado - ultimo_inicio).days) > 10:
+                    fechas_inicio.append(inicio_estimado)
+        except Exception:
+            continue
+            
+    dias_sombreados = 6 if current_user.get("es_irregular") else 4
+
+    if len(fechas_inicio) < 2:
+        promedio = 28
+    else:
+        diferencias = []
+        for i in range(1, len(fechas_inicio)):
+            diff = (fechas_inicio[i] - fechas_inicio[i-1]).days
+            if 20 <= diff <= 45:
+                diferencias.append(diff)
+        
+        if not diferencias:
+            promedio = 28
+        elif current_user.get("es_irregular") and len(diferencias) >= 2:
+            avg_last_2 = sum(diferencias[-2:]) / 2
+            if len(diferencias) > 2:
+                avg_older = sum(diferencias[:-2]) / len(diferencias[:-2])
+                promedio = int(0.8 * avg_last_2 + 0.2 * avg_older)
+            else:
+                promedio = int(avg_last_2)
+        else:
+            promedio = sum(diferencias) // len(diferencias)
+        
+    ultimo_ciclo = fechas_inicio[-1]
+    proximo_periodo_inicio = ultimo_ciclo + timedelta(days=promedio)
+    
+    fechas_prediccion = [(proximo_periodo_inicio + timedelta(days=i)).isoformat() for i in range(dias_sombreados)]
+    
+    return {"fechas": fechas_prediccion}

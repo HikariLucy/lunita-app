@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#fbc5d8">
     <link rel="manifest" href="manifest.json">
-    <title>Ciclo Zen ✨ Calendario Menstrual de Bienestar</title>
+    <title>Lunita 🌙✨ Diario Mágico de Bienestar</title>
     <!-- Google Fonts: Quicksand para una tipografía redondeada y tierna -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,6 +30,23 @@
             --shadow-soft: 0 10px 30px rgba(188, 156, 175, 0.12);
             --shadow-hover: 0 15px 35px rgba(188, 156, 175, 0.22);
             --transition-speed: 0.3s;
+        }
+
+        body.dark-mode {
+            --bg-gradient: linear-gradient(135deg, #1E1A24 0%, #2D1B36 100%);
+            --card-bg: rgba(45, 27, 54, 0.85);
+            --card-border: rgba(178, 141, 255, 0.2);
+            --text-main: #E8DFF5;
+            --text-muted: #B28DFF;
+            --accent-purple: #9E70FF;
+            --accent-purple-hover: #B28DFF;
+            --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .active-theme-btn {
+            background-color: var(--accent-purple) !important;
+            color: white !important;
+            border-color: var(--accent-purple) !important;
         }
 
         * {
@@ -736,19 +753,22 @@
         }
 
         .fc-daygrid-day-frame {
-            background-color: rgba(255, 255, 255, 0.7);
+            background-color: transparent;
             border-radius: 15px;
             margin: 4px;
             padding: 2px;
             transition: background-color 0.2s, transform 0.2s;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-            border: 1px solid rgba(232, 223, 245, 0.3);
+            border: none !important;
         }
 
         .fc-daygrid-day-frame:hover {
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(45, 27, 54, 0.5) !important;
             transform: scale(1.02);
             cursor: pointer;
+        }
+        
+        .fc-theme-standard td, .fc-theme-standard th {
+            border: none !important;
         }
 
         .fc-event {
@@ -871,9 +891,11 @@
         .auth-container { max-width: 400px; margin: 40px auto; }
         .auth-form { display: flex; flex-direction: column; gap: 15px; }
         .auth-toggle { text-align: center; font-size: 0.9rem; margin-top: 15px; cursor: pointer; color: var(--accent-purple); }
-        .top-nav { display: flex; align-items: center; justify-content: flex-end; gap: 20px; padding: 15px 30px; background: white; border-bottom: 1px solid #eee; }
-        .notification-bell { position: relative; cursor: pointer; font-size: 1.2rem; }
-        .notification-badge { position: absolute; top: -5px; right: -5px; background: var(--accent-pink); color: white; border-radius: 50%; font-size: 0.6rem; padding: 2px 5px; }
+        .top-nav { display: flex; align-items: center; justify-content: flex-end; gap: 20px; padding: 15px 30px; background: rgba(45, 27, 54, 0.4); border-bottom: none; border-radius: 25px; margin: 15px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+        .notification-bell, .settings-gear { position: relative; cursor: pointer; font-size: 1.5rem; display: flex; justify-content: center; align-items: center; width: 45px; height: 45px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); color: white; transition: background 0.2s; }
+        .notification-bell:hover, .settings-gear:hover { background: rgba(255,255,255,0.2); }
+        .notification-badge { position: absolute; top: -5px; right: -5px; background: var(--accent-pink); color: #5C4B62; border-radius: 50%; font-size: 0.7rem; padding: 3px 6px; font-weight: bold; }
+        #userNameDisplay { color: #E8DFF5 !important; font-size: 1.1rem; }
     </style>
     <!-- Chart.js para visualización de datos de estado de ánimo -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -901,7 +923,7 @@
 
     <header>
         <div class="logo-container">🌙</div>
-        <h1>Ciclo Zen</h1>
+        <h1>Lunita 🌙✨</h1>
         <p>Tu diario mágico de bienestar y autoconocimiento</p>
         <div class="api-status">
             <div id="statusDot" class="status-dot"></div>
@@ -919,6 +941,11 @@
             <input type="email" id="authEmail" class="input-control" placeholder="Correo electrónico 💌" style="display: none;">
             <input type="password" id="authPassword" class="input-control" placeholder="Contraseña secreta 🔐" required>
             
+            <div id="authIrregularContainer" class="form-group" style="display: none; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 5px;">
+                <input type="checkbox" id="authIrregular" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-purple);">
+                <label for="authIrregular" style="font-size: 0.95rem; color: var(--text-muted); cursor: pointer; user-select: none;">¿Tus ciclos suelen ser irregulares? 🔄</label>
+            </div>
+            
             <div id="forgotPasswordContainer" style="text-align: right; margin-bottom: 15px; font-size: 0.85rem;">
                 <a href="#" onclick="abrirModalRecuperacion(event)" style="color: var(--accent-purple); text-decoration: none;">¿Olvidaste tu contraseña? 🥺</a>
             </div>
@@ -931,6 +958,26 @@
 
     <!-- DASHBOARD PRINCIPAL (Oculto hasta login) -->
     <main id="dashboardContainer" class="container" style="display: none;">
+        <!-- Estado Actual Widget -->
+        <section id="estadoActualWidget" class="card full-width tarjeta-estado-actual" style="display: flex; flex-direction: column; background: linear-gradient(135deg, rgba(255,198,255,0.4) 0%, rgba(178,141,255,0.2) 100%);">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div id="estadoEmoji" style="font-size: 3.5rem; text-shadow: 0 4px 10px rgba(0,0,0,0.1);">🌑</div>
+                    <div>
+                        <h2 id="estadoTitulo" style="margin: 0; color: #5C4B62; font-size: 1.4rem;">Cargando...</h2>
+                        <p id="estadoFase" style="margin: 5px 0 0 0; color: #B28DFF; font-weight: 600; font-size: 1.1rem;">Conectando con la luna ✨</p>
+                    </div>
+                </div>
+                <div style="flex: 1; min-width: 200px; text-align: right; font-style: italic; color: #7A6F80;" id="estadoMensaje">
+                    ...
+                </div>
+            </div>
+            
+            <!-- Barra de Progreso Lunar -->
+            <div style="margin-top: 20px; width: 100%; background-color: rgba(255,255,255,0.6); border-radius: 10px; height: 12px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
+                <div id="estadoProgreso" style="height: 100%; width: 0%; background: linear-gradient(90deg, #FFC6FF 0%, #B28DFF 100%); border-radius: 10px; transition: width 1s ease-in-out;"></div>
+            </div>
+        </section>
 
         <!-- Contenedor de la Columna Izquierda -->
         <div style="display: flex; flex-direction: column; gap: 30px;">
@@ -1042,7 +1089,7 @@
 
         <!-- Gráfico de Evolución de Ánimo -->
         <section class="card" id="graficoWrapper">
-            <h2 class="card-title">Mi Historial Zen 📊</h2>
+            <h2 class="card-title">Mi Historial Mágico 🔮🌸</h2>
             <div style="position: relative; width: 100%; height: 260px;">
                 <canvas id="graficoHistorial"></canvas>
             </div>
@@ -1127,24 +1174,43 @@
         <div id="configModal" class="modal-oculto" onclick="cerrarModalConfiguracion(event)">
             <div class="modal-content" onclick="event.stopPropagation()">
                 <button class="btn-close-modal" onclick="cerrarModalConfiguracion()">✖️</button>
-                <h2 class="card-title" style="justify-content: center; margin-bottom: 10px;">Configuración ⚙️</h2>
-                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; text-align: center;">Actualiza tus datos mágicos. Deja en blanco lo que no quieras cambiar.</p>
+                <h2 class="card-title" style="justify-content: center; margin-bottom: 20px;">Configuración ⚙️</h2>
                 
-                <form id="configForm" onsubmit="guardarConfiguracion(event)">
-                    <div class="form-group">
-                        <label>Nuevo Nombre de Usuaria</label>
-                        <input type="text" id="configUsername" class="input-control" placeholder="Tu nombre mágico">
+                <div class="config-section" style="margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid var(--card-border);">
+                    <h3 style="margin-bottom: 15px; color: var(--accent-purple); font-size: 1.1rem;">👤 Datos de Cuenta</h3>
+                    <form id="configForm" onsubmit="guardarConfiguracion(event)">
+                        <div class="form-group">
+                            <label>Nuevo Nombre de Usuaria</label>
+                            <input type="text" id="configUsername" class="input-control" placeholder="Tu nombre mágico">
+                        </div>
+                        <div class="form-group">
+                            <label>Nuevo Correo</label>
+                            <input type="email" id="configEmail" class="input-control" placeholder="tu@correo.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Nueva Contraseña</label>
+                            <input type="password" id="configPassword" class="input-control" placeholder="Dejar en blanco para no cambiar">
+                        </div>
+                        <button type="submit" class="btn btn-purple" style="width: 100%;">Guardar Cambios ✨</button>
+                    </form>
+                </div>
+
+                <div class="config-section" style="margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid var(--card-border);">
+                    <h3 style="margin-bottom: 15px; color: var(--accent-purple); font-size: 1.1rem;">🎨 Apariencia</h3>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-outline" id="btnThemeLight" onclick="cambiarTema('light')" style="flex: 1;">Modo Sol ☀️</button>
+                        <button class="btn btn-outline" id="btnThemeDark" onclick="cambiarTema('dark')" style="flex: 1;">Modo Luna 🌙</button>
+                        <button class="btn btn-outline" id="btnThemeSystem" onclick="cambiarTema('system')" style="flex: 1;">Sistema 💻</button>
                     </div>
-                    <div class="form-group">
-                        <label>Nuevo Correo</label>
-                        <input type="email" id="configEmail" class="input-control" placeholder="tu@correo.com">
+                </div>
+
+                <div class="config-section">
+                    <h3 style="margin-bottom: 15px; color: var(--accent-salmon); font-size: 1.1rem;">❤️ Datos de Salud</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <button class="btn btn-outline" onclick="exportarDatos()">Exportar Datos 📥</button>
+                        <button class="btn" style="background-color: var(--accent-red); color: var(--accent-red-text);" onclick="confirmarBorrarDiario()">Borrar mi Diario 🗑️</button>
                     </div>
-                    <div class="form-group">
-                        <label>Nueva Contraseña</label>
-                        <input type="password" id="configPassword" class="input-control" placeholder="Dejar en blanco para no cambiar">
-                    </div>
-                    <button type="submit" class="btn btn-purple" style="width: 100%;">Guardar Cambios ✨</button>
-                </form>
+                </div>
             </div>
         </div>
 
@@ -1174,7 +1240,7 @@
 
     <!-- Lógica JavaScript -->
     <script>
-        const API_URL = "http://127.0.0.1:8000";
+        const API_URL = "";
         let miGrafico = null; // Instancia global de Chart.js
         let miCalendario = null; // Instancia global de FullCalendar
         
@@ -1188,6 +1254,7 @@
             document.getElementById("authSubmitBtn").textContent = isLoginMode ? "Entrar" : "Registrarse";
             document.getElementById("authEmail").style.display = isLoginMode ? "none" : "block";
             document.getElementById("authEmail").required = !isLoginMode;
+            document.getElementById("authIrregularContainer").style.display = isLoginMode ? "none" : "flex";
             document.getElementById("forgotPasswordContainer").style.display = isLoginMode ? "block" : "none";
             document.getElementById("authToggleText").innerHTML = isLoginMode 
                 ? '¿No tienes cuenta? <span onclick="toggleAuthMode()">Regístrate aquí</span>'
@@ -1231,7 +1298,7 @@
 
         // --- CONFIGURACIÓN DE USUARIO ---
         function abrirConfiguracion() {
-            document.getElementById("configModal").style.display = "flex";
+            document.getElementById("configModal").classList.add("show");
             document.getElementById("configUsername").value = localStorage.getItem("lunita_user") || "";
             document.getElementById("configEmail").value = "";
             document.getElementById("configPassword").value = "";
@@ -1239,7 +1306,103 @@
 
         function cerrarModalConfiguracion(e) {
             if (e) e.preventDefault();
-            document.getElementById("configModal").style.display = "none";
+            document.getElementById("configModal").classList.remove("show");
+        }
+
+        // --- TEMA (DARK/LIGHT MODE) ---
+        function inicializarTema() {
+            const savedTheme = localStorage.getItem('lunita_theme') || 'system';
+            aplicarTema(savedTheme);
+            actualizarBotonesTema(savedTheme);
+
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                if (localStorage.getItem('lunita_theme') === 'system') {
+                    aplicarTema('system');
+                }
+            });
+        }
+
+        function cambiarTema(theme) {
+            localStorage.setItem('lunita_theme', theme);
+            aplicarTema(theme);
+            actualizarBotonesTema(theme);
+        }
+
+        function aplicarTema(theme) {
+            let esOscuro = false;
+            if (theme === 'dark') {
+                esOscuro = true;
+            } else if (theme === 'system') {
+                esOscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            }
+            
+            if (esOscuro) {
+                document.body.classList.add('dark-mode');
+            } else {
+                document.body.classList.remove('dark-mode');
+            }
+        }
+
+        function actualizarBotonesTema(theme) {
+            const btnLight = document.getElementById('btnThemeLight');
+            const btnDark = document.getElementById('btnThemeDark');
+            const btnSystem = document.getElementById('btnThemeSystem');
+            
+            if (btnLight) btnLight.classList.remove('active-theme-btn');
+            if (btnDark) btnDark.classList.remove('active-theme-btn');
+            if (btnSystem) btnSystem.classList.remove('active-theme-btn');
+            
+            if (theme === 'light' && btnLight) btnLight.classList.add('active-theme-btn');
+            if (theme === 'dark' && btnDark) btnDark.classList.add('active-theme-btn');
+            if (theme === 'system' && btnSystem) btnSystem.classList.add('active-theme-btn');
+        }
+
+        // --- DATOS DE SALUD ---
+        function exportarDatos() {
+            const token = localStorage.getItem("lunita_token");
+            if (!token) return;
+            fetch(`${API_URL}/api/registros`, { headers: getAuthHeaders() })
+                .then(res => res.json())
+                .then(data => {
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+                    const downloadAnchorNode = document.createElement('a');
+                    downloadAnchorNode.setAttribute("href", dataStr);
+                    downloadAnchorNode.setAttribute("download", "lunita_diario.json");
+                    document.body.appendChild(downloadAnchorNode);
+                    downloadAnchorNode.click();
+                    downloadAnchorNode.remove();
+                    showNotification("Datos exportados exitosamente 📥", "success");
+                })
+                .catch(err => {
+                    console.error("Error al exportar:", err);
+                    showNotification("Error al exportar datos.", "error");
+                });
+        }
+
+        async function confirmarBorrarDiario() {
+            if (confirm("⚠️ ¿Estás segura de que quieres BORRAR todo tu diario? Esta acción no se puede deshacer.")) {
+                if (confirm("💔 Última advertencia: Si estás segura, presiona OK para eliminar todos tus registros de Lunita.")) {
+                    const token = localStorage.getItem("lunita_token");
+                    if (!token) return;
+                    
+                    try {
+                        const response = await fetch(`${API_URL}/api/registros`, {
+                            method: "DELETE",
+                            headers: getAuthHeaders()
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            showNotification("Tu diario ha sido borrado.", "success");
+                            cargarHistorial();
+                            cerrarModalConfiguracion();
+                        } else {
+                            showNotification(data.detail || "Error al borrar el diario.", "error");
+                        }
+                    } catch (error) {
+                        showNotification("Error de conexión.", "error");
+                    }
+                }
+            }
         }
 
         async function guardarConfiguracion(e) {
@@ -1316,11 +1479,12 @@
             } else {
                 // Registro
                 const email = document.getElementById("authEmail").value;
+                const es_irregular = document.getElementById("authIrregular").checked;
                 try {
                     const response = await fetch(`${API_URL}/api/registro`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, email, password })
+                        body: JSON.stringify({ username, email, password, es_irregular })
                     });
                     
                     if (!response.ok) {
@@ -1361,6 +1525,7 @@
             cargarHistorial();
             renderizarGrafico();
             cargarNotificaciones();
+            cargarEstadoActual();
         }
 
         // --- NOTIFICACIONES ---
@@ -1392,10 +1557,30 @@
             }
         }
 
+        // --- ESTADO ACTUAL ---
+        async function cargarEstadoActual() {
+            try {
+                const response = await fetch(`${API_URL}/api/estado_actual`, { headers: getAuthHeaders() });
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById("estadoEmoji").textContent = data.emoji;
+                    document.getElementById("estadoTitulo").textContent = `Hoy estás en tu Día ${data.dia}`;
+                    document.getElementById("estadoFase").textContent = `Fase ${data.fase}`;
+                    document.getElementById("estadoMensaje").textContent = data.mensaje;
+                    setTimeout(() => {
+                        document.getElementById("estadoProgreso").style.width = `${data.porcentaje}%`;
+                    }, 100);
+                }
+            } catch (error) {
+                console.error("Error al cargar estado actual:", error);
+            }
+        }
+
 
 
         // Al cargar la página
         document.addEventListener("DOMContentLoaded", () => {
+            inicializarTema();
             const token = localStorage.getItem("lunita_token");
             if (token) {
                 iniciarApp();
@@ -1535,14 +1720,14 @@
                         <div class="consejo-icon">🥗</div>
                         <div class="consejo-content">
                             <h4>Nutrición Consciente</h4>
-                            <p>${data.consejos.alimentacion}</p>
+                            <p>${data.consejos.nutricion}</p>
                         </div>
                     </div>
                     <div class="consejo-item-card" style="animation-delay: 0.1s">
                         <div class="consejo-icon">🧘‍♀️</div>
                         <div class="consejo-content">
                             <h4>Movimiento Saludable</h4>
-                            <p>${data.consejos.ejercicio}</p>
+                            <p>${data.consejos.movimiento}</p>
                         </div>
                     </div>
                     <div class="consejo-item-card" style="animation-delay: 0.2s">
@@ -1898,10 +2083,28 @@
                     }
                 };
             });
-            
             // Remover todos los eventos actuales y agregar los nuevos
             miCalendario.removeAllEvents();
             miCalendario.addEventSource(eventos);
+            
+            // Renderizar predicciones
+            fetch(`${API_URL}/api/prediccion`, { headers: getAuthHeaders() })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.fechas && data.fechas.length > 0) {
+                        const eventosPrediccion = data.fechas.map(f => ({
+                            title: '✨ Periodo Estimado',
+                            start: f,
+                            allDay: true,
+                            backgroundColor: 'rgba(255, 198, 255, 0.5)', // Rosa pastel translúcido
+                            borderColor: 'transparent',
+                            textColor: '#B28DFF',
+                            editable: false
+                        }));
+                        miCalendario.addEventSource(eventosPrediccion);
+                    }
+                })
+                .catch(err => console.error("Error al cargar predicción", err));
         }
     </script>
 </body>
