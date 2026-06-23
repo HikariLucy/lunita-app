@@ -1969,12 +1969,41 @@
 
         // 4. Buscar consejos de bienestar (GET)
         async function buscarConsejosAutomatico() {
-            if (!diaActualCiclo_Global || diaActualCiclo_Global < 1) {
-                showNotification("Aún no se ha cargado tu día actual.", "info");
-                return;
+            const resultsDiv = document.getElementById("consejosResults");
+            const faseBadgeContainer = document.getElementById("faseBadgeContainer");
+            
+            faseBadgeContainer.style.display = "none";
+            resultsDiv.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔮</div>
+                    <p>Consultando tu oráculo personal...</p>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/consejera`, {
+                    headers: getAuthHeaders()
+                });
+                
+                if (!response.ok) {
+                    throw new Error("No se pudo obtener el consejo.");
+                }
+                
+                const data = await response.json();
+                
+                resultsDiv.innerHTML = `
+                    <div class="consejo-item-card" style="margin-top: 15px;">
+                        <div class="consejo-icon">✨</div>
+                        <div class="consejo-content">
+                            <h4>Mensaje de Lunita para ti</h4>
+                            <p>${data.mensaje}</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error("Error en consejera:", error);
+                resultsDiv.innerHTML = `<p style="color:red">Ocurrió un error. Intenta más tarde.</p>`;
             }
-            document.getElementById("consejo_dia").value = ""; // Limpiar input manual
-            await ejecutarConsultaConsejos(diaActualCiclo_Global);
         }
 
         async function descubrirPronosticoMensual() {
@@ -2029,78 +2058,7 @@
             document.getElementById("pronosticoModal").style.display = "none";
         }
 
-        async function ejecutarConsultaConsejos(diaConsulta) {
-            const faseBadgeContainer = document.getElementById("faseBadgeContainer");
-            const faseName = document.getElementById("faseName");
-            const consejosResults = document.getElementById("consejosResults");
 
-            // Mostrar estado de carga si se desea (opcional)
-            consejosResults.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">🔮</div>
-                    <p>Conectando con la sabiduría lunar...</p>
-                </div>
-            `;
-
-            try {
-                const response = await fetch(`${API_URL}/api/consejos/${diaConsulta}`);
-                
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || "Error en el servidor");
-                }
-
-                const data = await response.json();
-
-                // Mostrar badge de la fase
-                faseBadgeContainer.style.display = "block";
-                
-                if (data.dia_del_ciclo >= 11 && data.dia_del_ciclo <= 16) {
-                    faseName.textContent = `Fase Ovulatoria 🌸 (Alta Fertilidad)`;
-                } else {
-                    faseName.textContent = `Fase ${data.fase} (Día ${data.dia_del_ciclo})`;
-                }
-                
-                // Limpiar clases y asignar la correcta para el estilo de la fase
-                faseName.className = "fase-badge";
-                const faseClase = "fase-" + data.fase.toLowerCase()
-                                    .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Normaliza acentos
-                faseName.classList.add(faseClase);
-
-                // Renderizar los consejos en tarjetas hermosas
-                consejosResults.innerHTML = `
-                    <div class="consejo-item-card">
-                        <div class="consejo-icon">🥗</div>
-                        <div class="consejo-content">
-                            <h4>Nutrición Consciente</h4>
-                            <p>${data.consejos.nutricion}</p>
-                        </div>
-                    </div>
-                    <div class="consejo-item-card" style="animation-delay: 0.1s">
-                        <div class="consejo-icon">🧘‍♀️</div>
-                        <div class="consejo-content">
-                            <h4>Movimiento Saludable</h4>
-                            <p>${data.consejos.ejercicio}</p>
-                        </div>
-                    </div>
-                    <div class="consejo-item-card" style="animation-delay: 0.2s">
-                        <div class="consejo-icon">🧠</div>
-                        <div class="consejo-content">
-                            <h4>Bienestar & Salud Mental</h4>
-                            <p>${data.consejos.salud_mental}</p>
-                        </div>
-                    </div>
-                `;
-            } catch (error) {
-                showNotification(error.message, "error");
-                consejosResults.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">⚠️</div>
-                        <p>No pudimos cargar los consejos. Intenta de nuevo.</p>
-                    </div>
-                `;
-            }
-        }
 
         // 5. Cargar historial de registros (GET)
         let registrosGlobales = []; // Guardamos los registros en memoria para uso del modal

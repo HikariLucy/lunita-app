@@ -168,12 +168,30 @@ def init_db():
             try:
                 with conn.cursor() as cursor:
                     cursor.execute("ALTER TABLE registros_diarios ADD COLUMN relaciones BOOLEAN DEFAULT FALSE")
+                conn.commit()
+            except Exception:
+                pass
+
+            try:
+                with conn.cursor() as cursor:
                     cursor.execute("ALTER TABLE registros_diarios ADD COLUMN tomo_pastilla BOOLEAN DEFAULT FALSE")
+                conn.commit()
+            except Exception:
+                pass
+
+            try:
+                with conn.cursor() as cursor:
                     cursor.execute("ALTER TABLE registros_diarios ADD COLUMN tomo_vitaminas BOOLEAN DEFAULT FALSE")
+                conn.commit()
+            except Exception:
+                pass
+
+            try:
+                with conn.cursor() as cursor:
                     cursor.execute("ALTER TABLE registros_diarios ADD COLUMN durmio_bien BOOLEAN DEFAULT FALSE")
                 conn.commit()
             except Exception:
-                conn.rollback()
+                pass
 
             try:
                 with conn.cursor() as cursor:
@@ -229,8 +247,17 @@ def init_db():
 
     try:
         cursor.execute("ALTER TABLE registros_diarios ADD COLUMN relaciones BOOLEAN DEFAULT FALSE")
+    except sqlite3.OperationalError:
+        pass
+    try:
         cursor.execute("ALTER TABLE registros_diarios ADD COLUMN tomo_pastilla BOOLEAN DEFAULT FALSE")
+    except sqlite3.OperationalError:
+        pass
+    try:
         cursor.execute("ALTER TABLE registros_diarios ADD COLUMN tomo_vitaminas BOOLEAN DEFAULT FALSE")
+    except sqlite3.OperationalError:
+        pass
+    try:
         cursor.execute("ALTER TABLE registros_diarios ADD COLUMN durmio_bien BOOLEAN DEFAULT FALSE")
     except sqlite3.OperationalError:
         pass
@@ -256,13 +283,14 @@ def init_db():
                 tomo_pastilla BOOLEAN DEFAULT FALSE,
                 tomo_vitaminas BOOLEAN DEFAULT FALSE,
                 durmio_bien BOOLEAN DEFAULT FALSE,
+                temperatura_basal NUMERIC,
                 UNIQUE(fecha, user_id)
             )
         """)
-        # Revisar si la tabla vieja        # Copiar datos antiguos si existen
+        # Revisar si la tabla vieja
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='registros_diarios'")
         if cursor.fetchone():
-            cursor.execute("INSERT OR IGNORE INTO registros_diarios_v2 (id, fecha, dia_del_ciclo, flujo, animo, sintomas, relaciones) SELECT id, fecha, dia_del_ciclo, flujo, animo, sintomas, relaciones FROM registros_diarios")
+            cursor.execute("INSERT OR IGNORE INTO registros_diarios_v2 (id, fecha, dia_del_ciclo, flujo, animo, sintomas, relaciones, tomo_pastilla, tomo_vitaminas, durmio_bien, temperatura_basal) SELECT id, fecha, dia_del_ciclo, flujo, animo, sintomas, relaciones, tomo_pastilla, tomo_vitaminas, durmio_bien, temperatura_basal FROM registros_diarios")
             cursor.execute("DROP TABLE registros_diarios")
             
         cursor.execute("ALTER TABLE registros_diarios_v2 RENAME TO registros_diarios")
