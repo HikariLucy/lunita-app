@@ -9,3 +9,5 @@ fastapi-mail
 jinja2
 weasyprint
 uvicorn
+pywebpush
+apscheduler

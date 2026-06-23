@@ -878,6 +878,26 @@
         .notification-bell, .settings-gear { position: relative; cursor: pointer; font-size: 1.5rem; display: flex; justify-content: center; align-items: center; width: 45px; height: 45px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); color: white; transition: background 0.2s; }
         .notification-bell:hover, .settings-gear:hover { background: rgba(255,255,255,0.2); }
         .notification-badge { position: absolute; top: -5px; right: -5px; background: var(--accent-pink); color: #5C4B62; border-radius: 50%; font-size: 0.7rem; padding: 3px 6px; font-weight: bold; }
+        /* --- Toggles de Hábitos --- */
+        .toggle-container { display: flex; align-items: center; justify-content: space-between; padding: 10px 15px; background: rgba(255,255,255,0.6); border-radius: 12px; margin-bottom: 8px; border: 1px solid var(--card-border); }
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 26px; }
+        .toggle-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        input:checked + .toggle-slider { background-color: var(--accent-purple); }
+        input:checked + .toggle-slider:before { transform: translateX(24px); }
+        
+        /* --- Pantalla de Bloqueo PIN --- */
+        .pantalla-bloqueo { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg-gradient); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
+        .pantalla-bloqueo.show { display: flex; }
+        .pin-dots { display: flex; gap: 15px; margin: 30px 0; }
+        .pin-dot { width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--accent-purple); transition: background 0.2s; }
+        .pin-dot.filled { background: var(--accent-purple); }
+        .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 250px; margin: 0 auto; }
+        .numpad-btn { width: 65px; height: 65px; border-radius: 50%; border: none; background: rgba(255,255,255,0.7); font-size: 1.5rem; font-family: 'Quicksand', sans-serif; color: var(--text-main); box-shadow: var(--shadow-soft); cursor: pointer; transition: transform 0.1s, background 0.2s; }
+        .numpad-btn:active { transform: scale(0.9); background: var(--accent-pink); }
+        .numpad-btn.delete { font-size: 1.2rem; background: transparent; box-shadow: none; }
+        
         #userNameDisplay { color: #E8DFF5 !important; font-size: 1.1rem; }
     </style>
     <!-- Chart.js para visualización de datos de estado de ánimo -->
@@ -887,6 +907,36 @@
 
 </head>
 <body>
+
+    <!-- PANTALLA DE BLOQUEO (Numpad) -->
+    <div id="pantalla-bloqueo" class="pantalla-bloqueo">
+        <h2 style="color: var(--accent-purple); font-size: 2rem; margin-bottom: 10px;">Ingresa tu PIN 🔒</h2>
+        <p style="color: var(--text-muted); font-size: 0.95rem;">Protegiendo tu magia</p>
+        
+        <div class="pin-dots" id="pinDots">
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+        </div>
+        
+        <div class="numpad">
+            <button class="numpad-btn" onclick="teclaPin(1)">1</button>
+            <button class="numpad-btn" onclick="teclaPin(2)">2</button>
+            <button class="numpad-btn" onclick="teclaPin(3)">3</button>
+            <button class="numpad-btn" onclick="teclaPin(4)">4</button>
+            <button class="numpad-btn" onclick="teclaPin(5)">5</button>
+            <button class="numpad-btn" onclick="teclaPin(6)">6</button>
+            <button class="numpad-btn" onclick="teclaPin(7)">7</button>
+            <button class="numpad-btn" onclick="teclaPin(8)">8</button>
+            <button class="numpad-btn" onclick="teclaPin(9)">9</button>
+            <div></div> <!-- Espacio vacío -->
+            <button class="numpad-btn" onclick="teclaPin(0)">0</button>
+            <button class="numpad-btn delete" onclick="borrarPin()">⌫</button>
+        </div>
+        
+        <button onclick="recuperarPin()" class="btn" style="background: transparent; border: none; color: var(--accent-purple); margin-top: 30px; font-weight: bold; cursor: pointer; text-decoration: underline;">¿Olvidaste tu PIN? 💌</button>
+    </div>
 
     <!-- Barra Superior -->
     <div class="top-nav" id="topNav" style="display: none; align-items: center;">
@@ -908,10 +958,6 @@
         <div class="logo-container">🌙</div>
         <h1>Lunita 🌙✨</h1>
         <p>Tu diario mágico de bienestar y autoconocimiento</p>
-        <div class="api-status">
-            <div id="statusDot" class="status-dot"></div>
-            <span id="statusText">Conectando...</span>
-        </div>
     </header>
 
     <!-- PANTALLA DE AUTENTICACIÓN -->
@@ -987,37 +1033,26 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Nivel de Flujo 💧</label>
-                    <div class="button-selector">
-                        <div class="selector-item">
-                            <input type="radio" id="flujo_ninguno" name="flujo" value="Ninguno" checked>
-                            <label for="flujo_ninguno" class="selector-label">
-                                <span class="emoji">🌸</span>
-                                <span>Ninguno</span>
-                            </label>
-                        </div>
-                        <div class="selector-item">
-                            <input type="radio" id="flujo_ligero" name="flujo" value="Ligero">
-                            <label for="flujo_ligero" class="selector-label">
-                                <span class="emoji">💧</span>
-                                <span>Ligero</span>
-                            </label>
-                        </div>
-                        <div class="selector-item">
-                            <input type="radio" id="flujo_moderado" name="flujo" value="Moderado">
-                            <label for="flujo_moderado" class="selector-label">
-                                <span class="emoji">💦</span>
-                                <span>Medio</span>
-                            </label>
-                        </div>
-                        <div class="selector-item">
-                            <input type="radio" id="flujo_abundante" name="flujo" value="Abundante">
-                            <label for="flujo_abundante" class="selector-label">
-                                <span class="emoji">🌊</span>
-                                <span>Abundante</span>
-                            </label>
-                        </div>
-                    </div>
+                    <label>Temperatura Basal 🌡️</label>
+                    <input type="number" id="temperatura_basal" class="input-control" step="0.1" placeholder="Ej: 36.5">
+                </div>
+
+                <div class="form-group">
+                    <label>Flujo Menstrual / Cervical 🩸🌸</label>
+                    <select id="flujo" class="input-control">
+                        <optgroup label="Sangrado">
+                            <option value="Ninguno" selected>Ninguno</option>
+                            <option value="Ligero">Ligero</option>
+                            <option value="Moderado">Moderado</option>
+                            <option value="Abundante">Abundante</option>
+                        </optgroup>
+                        <optgroup label="Flujo Cervical">
+                            <option value="Seco">Seco</option>
+                            <option value="Pegajoso">Pegajoso</option>
+                            <option value="Cremoso">Cremoso</option>
+                            <option value="Clara de Huevo (Fértil)">Clara de Huevo (Fértil)</option>
+                        </optgroup>
+                    </select>
                 </div>
 
                 <div class="form-group">
@@ -1073,6 +1108,40 @@
                     </div>
                 </div>
 
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+                    <input type="checkbox" id="relaciones" style="width: 20px; height: 20px; cursor: pointer; accent-color: var(--accent-pink);">
+                    <label for="relaciones" style="margin-bottom: 0; cursor: pointer; font-size: 1.05rem;">¿Tuviste intimidad hoy? ❤️</label>
+                </div>
+
+                <!-- Checklist de Autocuidado -->
+                <div class="form-group" style="margin-bottom: 25px; padding: 15px; background: rgba(178, 141, 255, 0.1); border-radius: 15px; border: 1px solid rgba(178, 141, 255, 0.3);">
+                    <label style="margin-bottom: 15px; color: var(--accent-purple); font-weight: 600;">Checklist de Autocuidado ✨</label>
+                    
+                    <div class="toggle-container">
+                        <span style="font-weight: 500;">Anticonceptivo 💊</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="tomo_pastilla">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div class="toggle-container">
+                        <span style="font-weight: 500;">Vitaminas 🌿</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="tomo_vitaminas">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div class="toggle-container">
+                        <span style="font-weight: 500;">Buen Descanso 💤</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="durmio_bien">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
                 <button type="submit" class="btn btn-salmon">Guardar Día 💖</button>
             </form>
         </section>
@@ -1088,17 +1157,13 @@
 
         <!-- Contenedor de la Columna Derecha -->
         <div style="display: flex; flex-direction: column; gap: 30px;">
-        <!-- Columna Derecha: Consejos Mágicos del Ciclo (GET) -->
-        <section class="card">
-            <h2 class="card-title">🔮 Consejos Mágicos 🧚‍♀️</h2>
-            <p style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-muted);">
-                Ingresa el día actual de tu ciclo para recibir recomendaciones personalizadas de nutrición, ejercicio y cuidado mental.
-            </p>
+        <!-- Consejera IA ✨ -->
+        <section class="card" style="background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,240,255,0.9) 100%);">
+            <h2 class="card-title">Consejera IA ✨</h2>
             
-            <div class="consejos-input-container">
-                <input type="number" id="consejo_dia" class="input-control" min="1" max="40" placeholder="Ej: 3">
-                <button onclick="buscarConsejos()" class="btn btn-purple" style="width: auto; padding-left: 25px; padding-right: 25px; white-space: nowrap;">Consultar ✨</button>
-            </div>
+            <button onclick="buscarConsejosAutomatico()" class="btn btn-magic" style="width: 100%; margin-bottom: 20px; font-size: 1.1rem; padding: 15px;">Consultar mi Estado de Hoy 🌙✨</button>
+            
+            <button onclick="descubrirPronosticoMensual()" class="btn btn-purple" style="width: 100%; margin-bottom: 20px;">🔮 Descubrir el pronóstico de mi mes</button>
 
             <!-- Badge de la Fase Menstrual -->
             <div id="faseBadgeContainer" class="fase-badge-container">
@@ -1107,25 +1172,7 @@
 
             <!-- Resultados de los Consejos -->
             <div id="consejosResults" class="consejos-results">
-                <div class="empty-state">
-                    <div class="empty-state-icon">🔮</div>
-                    <p>Ingresa un día del ciclo arriba para desplegar tu sabiduría zen.</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Consejera IA ✨ -->
-        <section class="card" style="background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,240,255,0.9) 100%);">
-            <h2 class="card-title">Consejera IA ✨</h2>
-            <p style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-muted);">
-                Descubre qué patrones mágicos tiene tu ciclo.
-            </p>
-            <button onclick="consultarConsejera()" class="btn btn-magic" style="width: 100%; margin-bottom: 20px;">¿Qué me depara mi ciclo? 🌙</button>
-            
-            <!-- Burbuja de chat -->
-            <div id="consejeraBubble" class="chat-bubble" style="display: none;">
-                <div class="chat-icon">✨</div>
-                <p id="consejeraTexto" class="chat-text"></p>
+                <!-- Se llenará vía JS -->
             </div>
         </section>
         </div>
@@ -1147,11 +1194,19 @@
                 <div style="display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; font-size: 1.2rem;">
                     <div id="modalAnimo"></div>
                     <div id="modalFlujo"></div>
+                    <div id="modalIntimidad" style="font-size: 1.1rem; display: flex; align-items: center; color: #5C4B62; font-weight: 600;"></div>
+                </div>
+                
+                <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; font-size: 1rem;">
+                    <div id="modalPastilla" title="Anticonceptivo"></div>
+                    <div id="modalVitaminas" title="Vitaminas"></div>
+                    <div id="modalDescanso" title="Buen Descanso"></div>
                 </div>
                 
                 <div style="background: var(--bg-gradient); padding: 15px; border-radius: 15px; margin-bottom: 20px;">
                     <strong style="color: var(--accent-purple);">Síntomas:</strong>
                     <p id="modalSintomas" style="margin-top: 5px; font-size: 0.95rem;"></p>
+                    <p id="modalTemperatura" style="margin-top: 5px; font-size: 0.95rem; color: #FFAAA6; font-weight: bold;"></p>
                 </div>
                 
                 <button id="modalBtnEliminar" class="btn-delete" style="width: 100%;">
@@ -1181,14 +1236,37 @@
                             <label>Nueva Contraseña</label>
                             <input type="password" id="configPassword" class="input-control" placeholder="Dejar en blanco para no cambiar">
                         </div>
+                        <div class="form-group">
+                            <label>⏰ Hora de tu Pastilla / Recordatorio</label>
+                            <input type="time" id="configHoraPastilla" class="input-control">
+                        </div>
                         <button type="submit" class="btn btn-purple" style="width: 100%;">Guardar Cambios ✨</button>
                     </form>
+                </div>
+
+                <div class="config-section" style="margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid var(--card-border);">
+                    <h3 style="margin-bottom: 15px; color: #5D8A46; font-size: 1.1rem;">🔒 PIN de Seguridad</h3>
+                    <form id="configPinForm" onsubmit="guardarPin(event)">
+                        <div class="form-group">
+                            <label>Configurar / Cambiar PIN</label>
+                            <input type="password" id="configPin" class="input-control" placeholder="Mínimo 4 números" minlength="4" maxlength="10">
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%; background: #D4ECC5; color: #5D8A46;">Guardar PIN 🛡️</button>
+                    </form>
+                </div>
+
+                <div class="config-section" style="margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid var(--card-border);">
+                    <h3 style="margin-bottom: 15px; color: var(--accent-purple); font-size: 1.1rem;">🔔 Notificaciones Push</h3>
+                    <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">Recibe recordatorios de tu fase actual y autocuidado directamente en tu pantalla.</p>
+                    <button class="btn btn-magic" style="width: 100%;" onclick="activarNotificaciones()">🔔 Activar Notificaciones Mágicas</button>
                 </div>
 
                 <div class="config-section">
                     <h3 style="margin-bottom: 15px; color: var(--accent-salmon); font-size: 1.1rem;">❤️ Datos de Salud</h3>
                     <div style="display: flex; flex-direction: column; gap: 10px;">
-                        <button class="btn btn-outline" onclick="exportarDatos()">Exportar Datos 📥</button>
+                        <button class="btn btn-outline" onclick="exportarDatos()">Exportar Datos JSON 📥</button>
+                        <button class="btn btn-purple" onclick="descargarReporte()">📄 Descargar Reporte Médico (PDF)</button>
+                        <button class="btn btn-magic" onclick="generarEnlacePareja()">🤝 Compartir con mi Pareja</button>
                         <button class="btn" style="background-color: var(--accent-red); color: var(--accent-red-text);" onclick="confirmarBorrarDiario()">Borrar mi Diario 🗑️</button>
                     </div>
                 </div>
@@ -1208,8 +1286,24 @@
                 <div class="form-group">
                     <input type="email" id="recuperarEmail" class="input-control" placeholder="Correo electrónico 💌" required>
                 </div>
+
+
                 <button type="submit" class="btn btn-purple" style="width: 100%;">Enviar correo 🕊️</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Pronóstico Mensual -->
+    <div id="pronosticoModal" class="modal-oculto" onclick="cerrarModalPronostico(event)" style="z-index: 10000;">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <button class="btn-close-modal" onclick="cerrarModalPronostico()">✖️</button>
+            <h2 class="card-title" style="justify-content: center; margin-bottom: 10px;">Tu Oráculo Hormonal 🔮</h2>
+            <div id="pronosticoContent">
+                <div class="empty-state">
+                    <div class="empty-state-icon">✨</div>
+                    <p>Conectando con las estrellas...</p>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1221,9 +1315,179 @@
 
     <!-- Lógica JavaScript -->
     <script>
+        // --- SERVICE WORKER & PUSH ---
+        function urlB64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        async function registrarServiceWorker() {
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                try {
+                    await navigator.serviceWorker.register('/sw.js');
+                    console.log('Service Worker registrado con éxito.');
+                } catch (e) {
+                    console.error('Error registrando Service Worker:', e);
+                }
+            }
+        }
+
+        async function activarNotificaciones() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                showNotification("Tu navegador no soporta notificaciones push. 😢", "error");
+                return;
+            }
+
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                showNotification("Permiso denegado para notificaciones. ❌", "error");
+                return;
+            }
+
+            try {
+                // Obtener llave pública VAPID
+                const res = await fetch(`${API_URL}/api/notificaciones/vapid-public-key`);
+                if (!res.ok) throw new Error("No se pudo obtener la llave pública.");
+                const data = await res.json();
+                const applicationServerKey = urlB64ToUint8Array(data.public_key);
+
+                // Suscribirse
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey
+                });
+
+                // Enviar suscripción al backend
+                const subRes = await fetch(`${API_URL}/api/notificaciones/suscribir`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify(subscription.toJSON())
+                });
+
+                if (subRes.ok) {
+                    showNotification("¡Notificaciones activadas mágicamente! 🔔✨", "success");
+                } else {
+                    throw new Error("Error al guardar suscripción en el servidor.");
+                }
+
+            } catch (err) {
+                console.error("Error en activación push:", err);
+                showNotification("Hubo un problema activando las notificaciones.", "error");
+            }
+        }
+
         const API_URL = "";
         let miGrafico = null; // Instancia global de Chart.js
         let miCalendario = null; // Instancia global de FullCalendar
+        
+        // --- LÓGICA DE PIN ---
+        let pinIngresado = "";
+        
+        function teclaPin(num) {
+            if (pinIngresado.length < 10) {
+                pinIngresado += num;
+                actualizarPuntosPin();
+            }
+            if (pinIngresado.length >= 4) {
+                verificarPinBackend();
+            }
+        }
+        
+        function borrarPin() {
+            if (pinIngresado.length > 0) {
+                pinIngresado = pinIngresado.slice(0, -1);
+                actualizarPuntosPin();
+            }
+        }
+        
+        function actualizarPuntosPin() {
+            const dots = document.getElementById("pinDots");
+            dots.innerHTML = "";
+            const length = Math.max(4, pinIngresado.length);
+            for (let i = 0; i < length; i++) {
+                const dot = document.createElement("div");
+                dot.className = "pin-dot" + (i < pinIngresado.length ? " filled" : "");
+                dots.appendChild(dot);
+            }
+        }
+        
+        async function verificarPinBackend() {
+            try {
+                const response = await fetch(`${API_URL}/api/usuario/verificar-pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({ pin: pinIngresado })
+                });
+                if (response.ok) {
+                    document.getElementById("pantalla-bloqueo").classList.remove("show");
+                    showNotification("Magia desbloqueada ✨", "success");
+                } else {
+                    const data = await response.json();
+                    showNotification(data.detail || "PIN incorrecto ❌", "error");
+                    pinIngresado = "";
+                    actualizarPuntosPin();
+                }
+            } catch (error) {
+                showNotification("Error de conexión ❌", "error");
+                pinIngresado = "";
+                actualizarPuntosPin();
+            }
+        }
+        
+        async function recuperarPin() {
+            showNotification("Enviando magia a tu correo... 🕊️", "info");
+            try {
+                const response = await fetch(`${API_URL}/api/usuario/recuperar-pin`, {
+                    method: 'POST',
+                    headers: getAuthHeaders()
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showNotification(data.mensaje, "success");
+                    // alert(data.mensaje); // Por si queremos asegurar que lo vea si es un correo local dev
+                } else {
+                    showNotification(data.detail, "error");
+                }
+            } catch (error) {
+                showNotification("Error de red", "error");
+            }
+        }
+        
+        async function guardarPin(e) {
+            e.preventDefault();
+            const nuevoPin = document.getElementById("configPin").value;
+            if (nuevoPin.length < 4) {
+                showNotification("El PIN debe tener al menos 4 números", "error");
+                return;
+            }
+            try {
+                const response = await fetch(`${API_URL}/api/usuario/pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({ pin: nuevoPin })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showNotification(data.mensaje, "success");
+                    document.getElementById("configPin").value = "";
+                    cerrarModalConfiguracion();
+                } else {
+                    showNotification(data.detail, "error");
+                }
+            } catch (error) {
+                showNotification("Error al guardar PIN", "error");
+            }
+        }
         
         // --- AUTENTICACIÓN ---
         let isLoginMode = true;
@@ -1278,11 +1542,25 @@
         }
 
         // --- CONFIGURACIÓN DE USUARIO ---
-        function abrirConfiguracion() {
+        async function abrirConfiguracion() {
             document.getElementById("configModal").classList.add("show");
             document.getElementById("configUsername").value = localStorage.getItem("lunita_user") || "";
             document.getElementById("configEmail").value = "";
             document.getElementById("configPassword").value = "";
+            document.getElementById("configHoraPastilla").value = "";
+            
+            try {
+                const response = await fetch(`${API_URL}/api/usuario/perfil`, { headers: getAuthHeaders() });
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById("configEmail").value = data.email || "";
+                    if (data.hora_recordatorio_pastilla) {
+                        document.getElementById("configHoraPastilla").value = data.hora_recordatorio_pastilla;
+                    }
+                }
+            } catch (error) {
+                console.error("Error al cargar perfil:", error);
+            }
         }
 
         function cerrarModalConfiguracion(e) {
@@ -1311,6 +1589,55 @@
                     console.error("Error al exportar:", err);
                     showNotification("Error al exportar datos.", "error");
                 });
+        }
+
+        // --- REPORTE MEDICO Y PAREJA ---
+        function descargarReporte() {
+            const token = localStorage.getItem("lunita_token");
+            if (!token) return;
+            
+            showNotification("Generando PDF... 📄✨", "info");
+            
+            fetch(`${API_URL}/api/reporte/pdf`, { headers: getAuthHeaders() })
+                .then(response => {
+                    if (!response.ok) throw new Error("Error al generar PDF");
+                    return response.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = "Reporte_Lunita.pdf";
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                    showNotification("¡Reporte descargado! 💖", "success");
+                })
+                .catch(err => {
+                    console.error(err);
+                    showNotification("Ups, hubo un error al generar el PDF.", "error");
+                });
+        }
+
+        async function generarEnlacePareja() {
+            try {
+                const response = await fetch(`${API_URL}/api/pareja/generar`, {
+                    method: 'POST',
+                    headers: getAuthHeaders()
+                });
+                
+                if (!response.ok) throw new Error("Error al generar token");
+                
+                const data = await response.json();
+                const enlace = window.location.origin + "/pareja/" + data.token;
+                
+                await navigator.clipboard.writeText(enlace);
+                showNotification("¡Enlace mágico copiado al portapapeles! 🤝✨", "success");
+            } catch (error) {
+                console.error(error);
+                showNotification("Ups, no pudimos generar el enlace.", "error");
+            }
         }
 
         async function confirmarBorrarDiario() {
@@ -1374,11 +1701,13 @@
             const newUsername = document.getElementById("configUsername").value.trim();
             const newEmail = document.getElementById("configEmail").value.trim();
             const newPassword = document.getElementById("configPassword").value.trim();
+            const newHoraPastilla = document.getElementById("configHoraPastilla").value;
             
             const payload = {};
             if (newUsername && newUsername !== localStorage.getItem("lunita_user")) payload.username = newUsername;
             if (newEmail) payload.email = newEmail;
             if (newPassword) payload.password = newPassword;
+            if (newHoraPastilla !== "") payload.hora_recordatorio_pastilla = newHoraPastilla;
             
             if (Object.keys(payload).length === 0) {
                 showNotification("No hay cambios para guardar.", "info");
@@ -1475,8 +1804,24 @@
             return token ? { "Authorization": `Bearer ${token}` } : {};
         }
 
-        function iniciarApp() {
+        async function iniciarApp() {
+            registrarServiceWorker();
+            
             document.getElementById("authContainer").style.display = "none";
+            
+            // Verificar si el usuario tiene PIN
+            try {
+                const response = await fetch(`${API_URL}/api/usuario/check-pin`, { headers: getAuthHeaders() });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.has_pin) {
+                        document.getElementById("pantalla-bloqueo").classList.add("show");
+                    }
+                }
+            } catch (e) {
+                console.error("Error al chequear PIN", e);
+            }
+
             document.getElementById("dashboardContainer").style.display = "grid";
             document.getElementById("topNav").style.display = "flex";
             document.getElementById("userNameDisplay").textContent = `¡Hola, ${localStorage.getItem("lunita_user")}!`;
@@ -1485,7 +1830,6 @@
             document.getElementById('fecha').value = hoy;
             
             inicializarCalendario();
-            verificarAPI();
             cargarHistorial();
             renderizarGrafico();
             cargarNotificaciones();
@@ -1522,13 +1866,16 @@
         }
 
         // --- ESTADO ACTUAL ---
+        let diaActualCiclo_Global = 1;
+
         async function cargarEstadoActual() {
             try {
                 const response = await fetch(`${API_URL}/api/estado_actual`, { headers: getAuthHeaders() });
                 if (response.ok) {
                     const data = await response.json();
+                    diaActualCiclo_Global = data.dia_actual || data.dia || 1;
                     document.getElementById("estadoEmoji").textContent = data.emoji;
-                    document.getElementById("estadoTitulo").textContent = `Hoy estás en tu Día ${data.dia}`;
+                    document.getElementById("estadoTitulo").textContent = `Hoy estás en tu Día ${diaActualCiclo_Global}`;
                     document.getElementById("estadoFase").textContent = `Fase ${data.fase}`;
                     document.getElementById("estadoMensaje").textContent = data.mensaje;
                     setTimeout(() => {
@@ -1553,31 +1900,6 @@
                 document.getElementById("topNav").style.display = "none";
             }
         });
-
-        // 1. Verificar si la API de FastAPI responde en la raíz
-        async function verificarAPI() {
-            const dot = document.getElementById("statusDot");
-            const text = document.getElementById("statusText");
-
-            try {
-                const response = await fetch(`${API_URL}/`);
-                if (response.ok) {
-                    dot.classList.add("online");
-                    text.textContent = "Servidor conectado 🟢";
-                } else {
-                    marcarDesconectado();
-                }
-            } catch (error) {
-                marcarDesconectado();
-            }
-        }
-
-        function marcarDesconectado() {
-            const dot = document.getElementById("statusDot");
-            const text = document.getElementById("statusText");
-            dot.classList.remove("online");
-            text.innerHTML = "Servidor desconectado 🔴 <small style='color: var(--accent-salmon-hover);'>(Inicia uvicorn en local)</small>";
-        }
 
         // 2. Mostrar alerta flotante (Toast)
         function showNotification(message, type = "success") {
@@ -1646,19 +1968,82 @@
         }
 
         // 4. Buscar consejos de bienestar (GET)
-        async function buscarConsejos() {
-            const diaInput = document.getElementById("consejo_dia").value;
+        async function buscarConsejosAutomatico() {
+            if (!diaActualCiclo_Global || diaActualCiclo_Global < 1) {
+                showNotification("Aún no se ha cargado tu día actual.", "info");
+                return;
+            }
+            document.getElementById("consejo_dia").value = ""; // Limpiar input manual
+            await ejecutarConsultaConsejos(diaActualCiclo_Global);
+        }
+
+        async function descubrirPronosticoMensual() {
+            document.getElementById("pronosticoModal").style.display = "flex";
+            const content = document.getElementById("pronosticoContent");
+            content.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔮</div>
+                    <p>Conectando con la sabiduría lunar... Analizando tu historial...</p>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/pronostico_mensual`, {
+                    headers: getAuthHeaders()
+                });
+                
+                if (!response.ok) {
+                    throw new Error("No se pudo obtener el pronóstico. Intenta más tarde.");
+                }
+                
+                const data = await response.json();
+                
+                content.innerHTML = `
+                    <div class="consejo-item-card">
+                        <div class="consejo-icon">📝</div>
+                        <div class="consejo-content">
+                            <h4>Tus Patrones Recientes</h4>
+                            <p>${data.analisis_patrones}</p>
+                        </div>
+                    </div>
+                    <div class="consejo-item-card" style="animation-delay: 0.1s; margin-top: 15px;">
+                        <div class="consejo-icon">🌙</div>
+                        <div class="consejo-content">
+                            <h4>Pronóstico Hormonal de este Mes</h4>
+                            <p>${data.pronostico_hormonal}</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function cerrarModalPronostico(e) {
+            if (e) e.preventDefault();
+            document.getElementById("pronosticoModal").style.display = "none";
+        }
+
+        async function ejecutarConsultaConsejos(diaConsulta) {
             const faseBadgeContainer = document.getElementById("faseBadgeContainer");
             const faseName = document.getElementById("faseName");
             const consejosResults = document.getElementById("consejosResults");
 
-            if (!diaInput || diaInput < 1) {
-                showNotification("Por favor ingresa un día de ciclo válido (mayor o igual a 1).", "error");
-                return;
-            }
+            // Mostrar estado de carga si se desea (opcional)
+            consejosResults.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔮</div>
+                    <p>Conectando con la sabiduría lunar...</p>
+                </div>
+            `;
 
             try {
-                const response = await fetch(`${API_URL}/api/consejos/${diaInput}`);
+                const response = await fetch(`${API_URL}/api/consejos/${diaConsulta}`);
                 
                 if (!response.ok) {
                     const err = await response.json();
@@ -1669,7 +2054,12 @@
 
                 // Mostrar badge de la fase
                 faseBadgeContainer.style.display = "block";
-                faseName.textContent = `Fase ${data.fase} (Día ${data.dia_del_ciclo})`;
+                
+                if (data.dia_del_ciclo >= 11 && data.dia_del_ciclo <= 16) {
+                    faseName.textContent = `Fase Ovulatoria 🌸 (Alta Fertilidad)`;
+                } else {
+                    faseName.textContent = `Fase ${data.fase} (Día ${data.dia_del_ciclo})`;
+                }
                 
                 // Limpiar clases y asignar la correcta para el estilo de la fase
                 faseName.className = "fase-badge";
@@ -1690,7 +2080,7 @@
                         <div class="consejo-icon">🧘‍♀️</div>
                         <div class="consejo-content">
                             <h4>Movimiento Saludable</h4>
-                            <p>${data.consejos.movimiento}</p>
+                            <p>${data.consejos.ejercicio}</p>
                         </div>
                     </div>
                     <div class="consejo-item-card" style="animation-delay: 0.2s">
@@ -1703,6 +2093,12 @@
                 `;
             } catch (error) {
                 showNotification(error.message, "error");
+                consejosResults.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <p>No pudimos cargar los consejos. Intenta de nuevo.</p>
+                    </div>
+                `;
             }
         }
 
@@ -1733,16 +2129,27 @@
 
             const fecha = document.getElementById("fecha").value;
             const dia_del_ciclo = parseInt(document.getElementById("dia_del_ciclo").value);
-            const flujo = document.querySelector('input[name="flujo"]:checked').value;
+            const flujo = document.getElementById("flujo").value;
             const animo = document.querySelector('input[name="animo"]:checked').value;
             const sintomas = document.getElementById("sintomas").value.trim();
+            const relaciones = document.getElementById("relaciones").checked;
+            
+            const tomo_pastilla = document.getElementById("tomo_pastilla").checked;
+            const tomo_vitaminas = document.getElementById("tomo_vitaminas").checked;
+            const durmio_bien = document.getElementById("durmio_bien").checked;
+
+            const temp_raw = document.getElementById("temperatura_basal").value;
+            const temperatura_basal = temp_raw ? parseFloat(temp_raw) : null;
 
             if (!fecha || !dia_del_ciclo || !flujo || !animo || !sintomas) {
                 showNotification("Por favor completa todos los campos del formulario.", "error");
                 return;
             }
 
-            const payload = { fecha, dia_del_ciclo, flujo, animo, sintomas };
+            const payload = { 
+                fecha, dia_del_ciclo, flujo, animo, sintomas, relaciones,
+                tomo_pastilla, tomo_vitaminas, durmio_bien, temperatura_basal
+            };
 
             try {
                 const response = await fetch(`${API_URL}/api/registros`, {
@@ -1764,8 +2171,10 @@
                 // Resetear campos del formulario (mantener la fecha)
                 document.getElementById("dia_del_ciclo").value = "";
                 document.getElementById("sintomas").value = "";
-                document.getElementById("flujo_ninguno").checked = true;
+                document.getElementById("temperatura_basal").value = "";
+                document.getElementById("flujo").value = "Ninguno";
                 document.getElementById("animo_feliz").checked = true;
+                document.getElementById("relaciones").checked = false;
 
                 // Recargar historial y gráfico
                 cargarHistorial();
@@ -1931,25 +2340,6 @@
             }
         }
 
-        // 9. Consultar Consejera IA
-        async function consultarConsejera() {
-            const bubble = document.getElementById("consejeraBubble");
-            const texto = document.getElementById("consejeraTexto");
-            
-            // Mostrar estado de carga
-            bubble.style.display = "flex";
-            texto.innerHTML = "<i>Consultando a los astros y tus registros... 🌙</i>";
-            
-            try {
-                const response = await fetch(`${API_URL}/api/consejera`, { headers: getAuthHeaders() });
-                if (!response.ok) throw new Error("No se pudo conectar con la consejera.");
-                
-                const data = await response.json();
-                texto.innerHTML = data.mensaje;
-            } catch (error) {
-                texto.innerHTML = "Uy, hubo un problemita intentando leer las estrellas. 🌠 Intenta de nuevo más tarde.";
-            }
-        }
 
         // 10. Inicializar FullCalendar
         function inicializarCalendario() {
@@ -1997,9 +2387,27 @@
             if (datos.flujo === "Ligero") flujoIcono = "💧";
             else if (datos.flujo === "Moderado") flujoIcono = "💦";
             else if (datos.flujo === "Abundante") flujoIcono = "🌊";
+            else if (datos.flujo === "Seco") flujoIcono = "🏜️";
+            else if (datos.flujo === "Pegajoso") flujoIcono = "🍯";
+            else if (datos.flujo === "Cremoso") flujoIcono = "🥛";
+            else if (datos.flujo === "Clara de Huevo (Fértil)") flujoIcono = "🥚✨";
             document.getElementById("modalFlujo").textContent = `${flujoIcono} ${datos.flujo}`;
             
+            const intimidadText = datos.relaciones ? "Sí ❤️" : "No";
+            document.getElementById("modalIntimidad").textContent = `Intimidad: ${intimidadText}`;
+            
+            document.getElementById("modalPastilla").innerHTML = datos.tomo_pastilla ? "💊 <span style='color: var(--accent-green-text); font-size: 0.8rem;'>Sí</span>" : "💊 <span style='color: var(--accent-red-text); font-size: 0.8rem;'>No</span>";
+            document.getElementById("modalVitaminas").innerHTML = datos.tomo_vitaminas ? "🌿 <span style='color: var(--accent-green-text); font-size: 0.8rem;'>Sí</span>" : "🌿 <span style='color: var(--accent-red-text); font-size: 0.8rem;'>No</span>";
+            document.getElementById("modalDescanso").innerHTML = datos.durmio_bien ? "💤 <span style='color: var(--accent-green-text); font-size: 0.8rem;'>Bien</span>" : "💤 <span style='color: var(--accent-red-text); font-size: 0.8rem;'>Mal</span>";
+            
             document.getElementById("modalSintomas").textContent = datos.sintomas;
+
+            if (datos.temperatura_basal) {
+                document.getElementById("modalTemperatura").textContent = `Temperatura: ${datos.temperatura_basal} °C 🌡️`;
+                document.getElementById("modalTemperatura").style.display = "block";
+            } else {
+                document.getElementById("modalTemperatura").style.display = "none";
+            }
             
             // Botón eliminar
             document.getElementById("modalBtnEliminar").onclick = () => eliminarRegistro(datos.id);
@@ -2026,6 +2434,10 @@
                     titulo += " 💧";
                 }
                 
+                if (reg.relaciones === true) {
+                    titulo += " ❤️";
+                }
+                
                 // Definir color de fondo basado en el ánimo o fase
                 let color = "var(--accent-pink)";
                 if (reg.animo === "Triste" || reg.animo === "Irritable") color = "var(--accent-salmon)";
@@ -2042,7 +2454,11 @@
                         animo: reg.animo,
                         flujo: reg.flujo,
                         sintomas: reg.sintomas,
-                        dia_del_ciclo: reg.dia_del_ciclo
+                        dia_del_ciclo: reg.dia_del_ciclo,
+                        relaciones: reg.relaciones,
+                        tomo_pastilla: reg.tomo_pastilla,
+                        tomo_vitaminas: reg.tomo_vitaminas,
+                        durmio_bien: reg.durmio_bien
                     }
                 };
             });

@@ -20,6 +20,9 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, Field, field_validator, EmailStr
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 import io
+import json
+from pywebpush import webpush, WebPushException
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Cargar variables de entorno
 load_dotenv()
@@ -53,7 +56,7 @@ from collections import Counter
 from dotenv import load_dotenv
 from google import genai
 from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
@@ -64,6 +67,11 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, Field, field_validator, EmailStr
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 import io
+import json
+from pywebpush import webpush, WebPushException
+from apscheduler.schedulers.background import BackgroundScheduler
+import weasyprint
+import secrets
 
 # Cargar variables de entorno
 load_dotenv()
@@ -97,7 +105,10 @@ def init_db():
                         username TEXT UNIQUE NOT NULL,
                         email TEXT UNIQUE NOT NULL,
                         hashed_password TEXT NOT NULL,
-                        es_irregular BOOLEAN DEFAULT FALSE
+                        es_irregular BOOLEAN DEFAULT FALSE,
+                        pin_seguridad TEXT,
+                        push_subscription TEXT,
+                        hora_recordatorio_pastilla TEXT
                     )
                 """)
                 
@@ -110,6 +121,10 @@ def init_db():
                         animo TEXT NOT NULL,
                         sintomas TEXT NOT NULL,
                         user_id INTEGER NOT NULL DEFAULT 1,
+                        relaciones BOOLEAN DEFAULT FALSE,
+                        tomo_pastilla BOOLEAN DEFAULT FALSE,
+                        tomo_vitaminas BOOLEAN DEFAULT FALSE,
+                        durmio_bien BOOLEAN DEFAULT FALSE,
                         UNIQUE(fecha, user_id)
                     )
                 """)
@@ -118,6 +133,51 @@ def init_db():
             try:
                 with conn.cursor() as cursor:
                     cursor.execute("ALTER TABLE usuarios ADD COLUMN es_irregular BOOLEAN DEFAULT FALSE")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("ALTER TABLE usuarios ADD COLUMN pin_seguridad TEXT")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("ALTER TABLE usuarios ADD COLUMN push_subscription TEXT")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("ALTER TABLE usuarios ADD COLUMN hora_recordatorio_pastilla TEXT")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("ALTER TABLE usuarios ADD COLUMN token_pareja TEXT")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("ALTER TABLE registros_diarios ADD COLUMN relaciones BOOLEAN DEFAULT FALSE")
+                    cursor.execute("ALTER TABLE registros_diarios ADD COLUMN tomo_pastilla BOOLEAN DEFAULT FALSE")
+                    cursor.execute("ALTER TABLE registros_diarios ADD COLUMN tomo_vitaminas BOOLEAN DEFAULT FALSE")
+                    cursor.execute("ALTER TABLE registros_diarios ADD COLUMN durmio_bien BOOLEAN DEFAULT FALSE")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("ALTER TABLE registros_diarios ADD COLUMN temperatura_basal NUMERIC")
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -134,12 +194,49 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             email TEXT UNIQUE NOT NULL,
             hashed_password TEXT NOT NULL,
-            es_irregular BOOLEAN DEFAULT FALSE
+            es_irregular BOOLEAN DEFAULT FALSE,
+            pin_seguridad TEXT,
+            push_subscription TEXT,
+            hora_recordatorio_pastilla TEXT,
+            token_pareja TEXT
         )
     """)
     
     try:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN es_irregular BOOLEAN DEFAULT FALSE")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN pin_seguridad TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN push_subscription TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN hora_recordatorio_pastilla TEXT")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN token_pareja TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE registros_diarios ADD COLUMN relaciones BOOLEAN DEFAULT FALSE")
+        cursor.execute("ALTER TABLE registros_diarios ADD COLUMN tomo_pastilla BOOLEAN DEFAULT FALSE")
+        cursor.execute("ALTER TABLE registros_diarios ADD COLUMN tomo_vitaminas BOOLEAN DEFAULT FALSE")
+        cursor.execute("ALTER TABLE registros_diarios ADD COLUMN durmio_bien BOOLEAN DEFAULT FALSE")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE registros_diarios ADD COLUMN temperatura_basal NUMERIC")
     except sqlite3.OperationalError:
         pass
 
@@ -155,13 +252,17 @@ def init_db():
                 animo TEXT NOT NULL,
                 sintomas TEXT NOT NULL,
                 user_id INTEGER NOT NULL DEFAULT 1,
+                relaciones BOOLEAN DEFAULT FALSE,
+                tomo_pastilla BOOLEAN DEFAULT FALSE,
+                tomo_vitaminas BOOLEAN DEFAULT FALSE,
+                durmio_bien BOOLEAN DEFAULT FALSE,
                 UNIQUE(fecha, user_id)
             )
         """)
         # Revisar si la tabla vieja        # Copiar datos antiguos si existen
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='registros_diarios'")
         if cursor.fetchone():
-            cursor.execute("INSERT OR IGNORE INTO registros_diarios_v2 (id, fecha, dia_del_ciclo, flujo, animo, sintomas) SELECT id, fecha, dia_del_ciclo, flujo, animo, sintomas FROM registros_diarios")
+            cursor.execute("INSERT OR IGNORE INTO registros_diarios_v2 (id, fecha, dia_del_ciclo, flujo, animo, sintomas, relaciones) SELECT id, fecha, dia_del_ciclo, flujo, animo, sintomas, relaciones FROM registros_diarios")
             cursor.execute("DROP TABLE registros_diarios")
             
         cursor.execute("ALTER TABLE registros_diarios_v2 RENAME TO registros_diarios")
@@ -262,8 +363,8 @@ def crear_datos_demo(db):
             
         ejecutar_query(cursor, 
             """
-            INSERT INTO registros_diarios (fecha, dia_del_ciclo, flujo, animo, sintomas, user_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO registros_diarios (fecha, dia_del_ciclo, flujo, animo, sintomas, user_id, relaciones)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 fecha_registro.isoformat(),
@@ -271,7 +372,8 @@ def crear_datos_demo(db):
                 flujo,
                 animo,
                 sintomas,
-                user_id
+                user_id,
+                False
             )
         )
     db.commit()
@@ -296,11 +398,166 @@ async def reset_demo_user_loop():
             
         await asyncio.sleep(12 * 3600) # 12 horas
 
+# --- TAREAS PROGRAMADAS (APScheduler) ---
+scheduler = BackgroundScheduler()
+
+def verificar_habitos_diarios():
+    from datetime import datetime
+    hora_actual = datetime.now().strftime("%H:%M")
+    hoy = date.today().isoformat()
+    # Abrimos una conexión nueva para el hilo del scheduler
+    if IS_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.cursor_factory = DictCursor
+    else:
+        conn = sqlite3.connect(DATABASE_NAME)
+        conn.row_factory = sqlite3.Row
+        
+    try:
+        cursor = conn.cursor()
+        # Seleccionamos usuarias con hora exacta y cruzamos con registros de hoy
+        query = """
+            SELECT u.id, r.tomo_pastilla 
+            FROM usuarios u
+            LEFT JOIN registros_diarios r ON u.id = r.user_id AND r.fecha = %s
+            WHERE u.hora_recordatorio_pastilla = %s
+        """ if IS_POSTGRES else """
+            SELECT u.id, r.tomo_pastilla 
+            FROM usuarios u
+            LEFT JOIN registros_diarios r ON u.id = r.user_id AND r.fecha = ?
+            WHERE u.hora_recordatorio_pastilla = ?
+        """
+        cursor.execute(query, (hoy, hora_actual))
+        filas = cursor.fetchall()
+        
+        for fila in filas:
+            user_id = fila["id"]
+            tomo_pastilla = fila["tomo_pastilla"]
+            
+            # Si no hay registro (tomo_pastilla is None) o si tomo_pastilla es False
+            if tomo_pastilla is None or not tomo_pastilla:
+                enviar_notificacion_push(
+                    user_id, 
+                    "¡Hora de tu pastilla mágica! 💊✨", 
+                    "Lunita te recuerda tomar tu anticonceptivo. ¡Regístralo para mantener tu racha!", 
+                    conn
+                )
+    except Exception as e:
+        print(f"Error en verificar_habitos_diarios: {e}")
+    finally:
+        conn.close()
+
+def generar_alerta_semanal():
+    print("Ejecutando tarea programada: generar_alerta_semanal...")
+    if IS_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.cursor_factory = DictCursor
+    else:
+        conn = sqlite3.connect(DATABASE_NAME)
+        conn.row_factory = sqlite3.Row
+        
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, email FROM usuarios")
+        usuarios = cursor.fetchall()
+        
+        hace_7_dias = (date.today() - timedelta(days=7)).isoformat()
+        
+        for u in usuarios:
+            try:
+                # 1. Obtener registros de la semana
+                ejecutar_query(cursor, """
+                    SELECT fecha, dia_del_ciclo, flujo, animo, sintomas, temperatura_basal 
+                    FROM registros_diarios 
+                    WHERE user_id = ? AND fecha >= ?
+                    ORDER BY fecha ASC
+                """, (u["id"], hace_7_dias))
+                registros = cursor.fetchall()
+                
+                # 2. Si no hay registros, enviar push amable y saltar
+                if not registros:
+                    enviar_notificacion_push(
+                        u["id"], 
+                        "🌙 ¡Lunita te extraña!", 
+                        "Esta semana no hemos sabido de ti. Vuelve a escribir en tu diario para no perder el hilo de tu magia.", 
+                        conn
+                    )
+                    continue
+                
+                # 3. Formatear datos
+                resumen = f"Registros de los últimos 7 días de {u['username']}:\n"
+                for r in registros:
+                    resumen += f"- Fecha {r['fecha']} (Día {r['dia_del_ciclo']}): Flujo {r['flujo']}, Ánimo {r['animo']}, Síntomas: {r['sintomas']}, Temp: {r['temperatura_basal']}°C\n"
+                    
+                # 4. System Instruction para Gemini
+                system_instruction = (
+                    "Eres Lunita. Recibirás el registro semanal de la usuaria. "
+                    "Redacta un correo electrónico (en formato HTML básico y limpio, usando colores pastel en línea) "
+                    "resumiendo cómo estuvo su semana hormonalmente, felicitándola por sus buenos hábitos y "
+                    "dándole un consejo cálido y experto para la semana que comienza. Mantén el tono de amiga experta."
+                )
+                
+                # 5. Llamada a Gemini
+                if client:
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=resumen,
+                        config=genai.types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            temperature=0.7,
+                        ),
+                    )
+                    html_content = response.text.replace("```html", "").replace("```", "").strip()
+                else:
+                    html_content = f"<h1>Hola {u['username']}</h1><p>Parece que la IA no está conectada.</p>"
+                    
+                # 6. Envío del correo usando FastAPI-Mail (asíncrono)
+                async def enviar_correo_async(destinatario, html_body):
+                    message = MessageSchema(
+                        subject="🌙 Tu Magia Semanal: Análisis de Lunita ✨",
+                        recipients=[destinatario],
+                        body=html_body,
+                        subtype=MessageType.html
+                    )
+                    fm = FastMail(conf)
+                    await fm.send_message(message)
+                
+                # Ejecutar el corutina en el hilo actual de forma segura
+                asyncio.run(enviar_correo_async(u["email"], html_content))
+                print(f"Correo enviado exitosamente a {u['email']}")
+                
+                # Enviar push avisando que el correo llegó
+                enviar_notificacion_push(
+                    u["id"], 
+                    "💌 Tu Análisis Semanal está listo", 
+                    "Revisa tu correo electrónico para leer el resumen mágico de tu semana.", 
+                    conn
+                )
+                
+            except Exception as loop_e:
+                print(f"Error procesando usuaria {u['id']}: {loop_e}")
+                
+    except Exception as e:
+        print(f"Error general en generar_alerta_semanal: {e}")
+    finally:
+        conn.close()
+
 # Ejecutar la creación de tablas al iniciar la aplicación
 @app.on_event("startup")
 async def startup_event():
     init_db()
     asyncio.create_task(reset_demo_user_loop())
+    
+    # Iniciar tareas programadas
+    scheduler.add_job(verificar_habitos_diarios, 'cron', minute='*')
+    scheduler.add_job(generar_alerta_semanal, 'cron', day_of_week='sun', hour=10, minute=0)
+    scheduler.start()
+    print("APScheduler iniciado.")
+
+@app.on_event("shutdown")
+def shutdown_event():
+    scheduler.shutdown()
+    print("APScheduler detenido.")
 
 @app.get("/")
 def raiz():
@@ -319,6 +576,14 @@ def get_manifest():
     if os.path.exists("manifest.json"):
         return FileResponse("manifest.json", media_type="application/manifest+json")
     return {"error": "Manifest not found"}
+
+@app.get("/sw.js")
+def get_sw():
+    from fastapi.responses import FileResponse
+    import os
+    if os.path.exists("sw.js"):
+        return FileResponse("sw.js", media_type="application/javascript")
+    return {"error": "Service worker not found"}
 
 @app.get("/icon-192x192.png")
 def get_icon_192():
@@ -510,10 +775,89 @@ async def recuperar_password(data: RecuperarPassword, db: sqlite3.Connection = D
             detail="Uy, hubo un problema enviando el correo. ¿Están bien tus credenciales SMTP en el .env?"
         )
 
+class PinUpdate(BaseModel):
+    pin: str = Field(..., min_length=4, max_length=10)
+
+class PinVerify(BaseModel):
+    pin: str
+
+@app.post("/api/usuario/pin")
+def configurar_pin(data: PinUpdate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    cursor = db.cursor()
+    hashed_pin = get_password_hash(data.pin)
+    try:
+        ejecutar_query(cursor, "UPDATE usuarios SET pin_seguridad = ? WHERE id = ?", (hashed_pin, current_user["id"]))
+        db.commit()
+        return {"mensaje": "PIN de seguridad configurado exitosamente 🔒✨"}
+    except sqlite3.Error as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error interno al guardar el PIN.")
+
+@app.get("/api/usuario/check-pin")
+def check_pin(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    return {"has_pin": bool(current_user.get("pin_seguridad"))}
+
+@app.post("/api/usuario/verificar-pin")
+def verificar_pin(data: PinVerify, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    hashed_pin = current_user.get("pin_seguridad")
+    if not hashed_pin or not verify_password(data.pin, hashed_pin):
+        raise HTTPException(status_code=401, detail="PIN incorrecto")
+    return {"mensaje": "PIN verificado correctamente"}
+
+@app.post("/api/usuario/recuperar-pin")
+async def recuperar_pin(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    if not current_user.get("pin_seguridad"):
+        raise HTTPException(status_code=400, detail="No tienes un PIN configurado.")
+    
+    import secrets
+    import string
+    nuevo_pin = ''.join(secrets.choice(string.digits) for i in range(4))
+    
+    cursor = db.cursor()
+    hashed_pin = get_password_hash(nuevo_pin)
+    ejecutar_query(cursor, "UPDATE usuarios SET pin_seguridad = ? WHERE id = ?", (hashed_pin, current_user["id"]))
+    db.commit()
+    
+    html_content = f"""
+    <div style="background-color: #FFF8F0; padding: 40px; border-radius: 20px; font-family: sans-serif; text-align: center; color: #4A3E4D; border: 2px solid #FFC6FF; max-width: 500px; margin: auto;">
+        <h2 style="color: #B28DFF;">¡Tranquila, aquí está tu nuevo PIN! 🌙</h2>
+        <p>Tu nuevo PIN temporal de seguridad es:</p>
+        <div style="background: white; padding: 15px; border-radius: 10px; font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #B28DFF; margin: 20px auto; width: max-content; border: 1px dashed #FFC6FF;">{nuevo_pin}</div>
+        <p>Entra con este PIN y luego cámbialo en la sección de configuración si lo deseas.</p>
+    </div>
+    """
+
+    message = MessageSchema(
+        subject="Tu nuevo PIN mágico en Lunita ✨",
+        recipients=[current_user["email"]],
+        body=html_content,
+        subtype=MessageType.html
+    )
+
+    try:
+        fm = FastMail(conf)
+        await fm.send_message(message)
+        return {"mensaje": f"Se ha enviado un correo a {current_user['email']} con tu nuevo PIN temporal. 💌"}
+    except Exception as e:
+        print(f"Error enviando correo SMTP: {e}")
+        # En caso de error de correo (ej. credenciales faltantes), igual devolvemos éxito para la prueba 
+        # (Idealmente debería fallar, pero para entornos de desarrollo sin smtp configurado, lo mostramos)
+        return {"mensaje": f"Modo Dev: No se pudo enviar el correo, pero tu nuevo PIN es {nuevo_pin} (Configura SMTP en .env)"}
+
+@app.get("/api/usuario/perfil")
+def get_perfil(current_user: dict = Depends(get_current_user)):
+    return {
+        "username": current_user.get("username"),
+        "email": current_user.get("email"),
+        "es_irregular": current_user.get("es_irregular"),
+        "hora_recordatorio_pastilla": current_user.get("hora_recordatorio_pastilla")
+    }
+
 class ConfigUsuario(BaseModel):
     username: Optional[str] = None
     email: Optional[EmailStr] = None
     password: Optional[str] = None
+    hora_recordatorio_pastilla: Optional[str] = None
 
 @app.put("/api/usuario/configuracion")
 async def actualizar_configuracion(data: ConfigUsuario, db: sqlite3.Connection = Depends(get_db), token: str = Depends(oauth2_scheme)):
@@ -551,6 +895,10 @@ async def actualizar_configuracion(data: ConfigUsuario, db: sqlite3.Connection =
     if data.password:
         updates.append("hashed_password = ?")
         params.append(get_password_hash(data.password))
+        
+    if data.hora_recordatorio_pastilla is not None:
+        updates.append("hora_recordatorio_pastilla = ?")
+        params.append(data.hora_recordatorio_pastilla)
         
     if not updates:
         return {"mensaje": "No se realizaron cambios."}
@@ -595,6 +943,11 @@ class RegistroDiarioBase(BaseModel):
     flujo: str = Field(..., min_length=1, description="Nivel de flujo: Ninguno, Ligero, Moderado, Abundante")
     animo: str = Field(..., min_length=1, description="Estado de ánimo predominante")
     sintomas: str = Field(..., min_length=1, description="Síntomas físicos o emocionales experimentados")
+    relaciones: bool = False
+    tomo_pastilla: bool = False
+    tomo_vitaminas: bool = False
+    durmio_bien: bool = False
+    temperatura_basal: Optional[float] = Field(None, description="Temperatura basal en °C")
 
     @field_validator("fecha", mode="before")
     def parse_fecha(cls, value):
@@ -614,6 +967,11 @@ class RegistroDiarioUpdate(BaseModel):
     flujo: Optional[str] = None
     animo: Optional[str] = None
     sintomas: Optional[str] = None
+    relaciones: Optional[bool] = None
+    tomo_pastilla: Optional[bool] = None
+    tomo_vitaminas: Optional[bool] = None
+    durmio_bien: Optional[bool] = None
+    temperatura_basal: Optional[float] = None
 
     @field_validator("fecha", mode="before")
     def parse_fecha(cls, value):
@@ -648,10 +1006,9 @@ def crear_registro(registro: RegistroDiarioBase, db: sqlite3.Connection = Depend
         )
         
     try:
-        ejecutar_query(cursor, 
-            """
-            INSERT INTO registros_diarios (fecha, dia_del_ciclo, flujo, animo, sintomas, user_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+        ejecutar_query(cursor, """
+            INSERT INTO registros_diarios (fecha, dia_del_ciclo, flujo, animo, sintomas, user_id, relaciones, tomo_pastilla, tomo_vitaminas, durmio_bien, temperatura_basal)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 registro.fecha.isoformat(),
@@ -659,7 +1016,12 @@ def crear_registro(registro: RegistroDiarioBase, db: sqlite3.Connection = Depend
                 registro.flujo,
                 registro.animo,
                 registro.sintomas,
-                current_user["id"]
+                current_user["id"],
+                registro.relaciones,
+                registro.tomo_pastilla,
+                registro.tomo_vitaminas,
+                registro.durmio_bien,
+                registro.temperatura_basal
             )
         )
         db.commit()
@@ -788,13 +1150,16 @@ def obtener_consejos(dia_del_ciclo: int):
         )
         
     system_instruction = (
-        "Actúas como Lunita, una asistente inteligente experta en salud hormonal femenina y nutrición cíclica. "
-        "Tu tono es empático, cercano, sutilmente tierno y amigable, pero mantienes una base estrictamente informativa, clara y científica. "
-        "Evita adjetivos excesivamente empalagosos o maternales (como preciosa, hermosa, etc.). Tu prioridad es entregar valor de forma directa. "
-        "Debes devolver estrictamente un JSON válido con esta estructura exacta: "
-        '{"nutricion": "qué comer específicamente para balancear las hormonas de ese día", '
-        '"movimiento": "ejercicio adecuado según la energía del momento", '
-        '"salud_mental": "consejo zen de autocuidado"}'
+        "Eres Lunita, una experta en salud femenina y bienestar cíclico. Tu misión es educar a la usuaria sobre su cuerpo, pero hablando como una amiga cercana, cálida y moderna. Traduce la ciencia a un lenguaje cotidiano, empático y fácil de digerir.\n\n"
+        "REGLAS DE TONO:\n"
+        "- Menciona de forma sencilla qué hormonas están actuando (ej: 'Tus estrógenos están en su punto más alto, lo que te dará mucha energía natural...').\n"
+        "- Haz recomendaciones de vitaminas y alimentos, pero redactadas como una charla amigable, no como una receta médica.\n"
+        "- Escribe párrafos cortos y fluidos. No uses lenguaje excesivamente clínico ni parezcas un robot. Usa emojis con buen gusto.\n\n"
+        "REGLA TÉCNICA OBLIGATORIA:\n"
+        "Tu respuesta DEBE ser un JSON válido con las tres claves exactas: nutricion, ejercicio y salud_mental.\n"
+        "¡ATENCIÓN! Los valores de estas claves DEBEN ser cadenas de texto simples (strings) con tu consejo redactado en lenguaje natural. PROHIBIDO incluir listas [], diccionarios anidados {}, o viñetas raras de markdown dentro de los valores. Solo texto limpio y directo. Devuelve ÚNICA Y EXCLUSIVAMENTE el objeto JSON. No agregues saludos, ni explicaciones antes o después de las llaves {}.\n\n"
+        "REGLA SINTOTÉRMICA:\n"
+        "Utiliza el método sintotérmico: un aumento sostenido de la temperatura basal junto con flujo tipo 'clara de huevo' confirma la ventana de máxima fertilidad y la ovulación."
     )
     
     user_prompt = f"Genera los consejos mágicos para el día {dia_del_ciclo} del ciclo menstrual."
@@ -809,14 +1174,32 @@ def obtener_consejos(dia_del_ciclo: int):
             contents=prompt,
         )
         
-        texto = response.text.strip()
-        if texto.startswith("```json"):
-            texto = texto[7:]
-        if texto.endswith("```"):
-            texto = texto[:-3]
-            
+        texto_crudo = response.text.strip()
+        
+        import re
         import json
-        consejos_json = json.loads(texto.strip())
+        
+        # Buscar el bloque JSON dentro del texto crudo
+        match = re.search(r'\{.*\}', texto_crudo, re.DOTALL)
+        if match:
+            texto_json = match.group(0)
+        else:
+            texto_json = texto_crudo
+            
+        consejos_raw = json.loads(texto_json)
+        
+        def a_texto(val):
+            if isinstance(val, dict):
+                return " ".join([str(v) for v in val.values()])
+            elif isinstance(val, list):
+                return ", ".join([str(v) for v in val])
+            return str(val) if val else "Sin información."
+            
+        consejos_json = {
+            "nutricion": a_texto(consejos_raw.get("nutricion")),
+            "ejercicio": a_texto(consejos_raw.get("ejercicio", consejos_raw.get("movimiento"))),
+            "salud_mental": a_texto(consejos_raw.get("salud_mental"))
+        }
         
         if 1 <= dia_del_ciclo <= 5: fase = "Menstrual"
         elif 6 <= dia_del_ciclo <= 13: fase = "Folicular"
@@ -829,7 +1212,9 @@ def obtener_consejos(dia_del_ciclo: int):
             "consejos": consejos_json
         }
     except Exception as e:
-        print(f"Error generando consejos con Gemini: {e}")
+        print(f"Error al procesar Gemini: {e}")
+        if 'texto_crudo' in locals():
+            print(f"Texto crudo devuelto por la IA: {texto_crudo}")
         # Fallback de emergencia
         if 1 <= dia_del_ciclo <= 5: fase = "Menstrual"
         elif 6 <= dia_del_ciclo <= 13: fase = "Folicular"
@@ -841,7 +1226,7 @@ def obtener_consejos(dia_del_ciclo: int):
             "fase": fase,
             "consejos": {
                 "nutricion": "Escucha a tu cuerpo y mantente muy hidratada. 🍵",
-                "movimiento": "Muévete a tu propio ritmo, honrando tu energía de hoy. 🧘‍♀️",
+                "ejercicio": "Muévete a tu propio ritmo, honrando tu energía de hoy. 🧘‍♀️",
                 "salud_mental": "Sé muy amable y compasiva contigo misma. ✨"
             }
         }
@@ -851,7 +1236,7 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
     # 1. Obtener los últimos 5 registros para dar contexto a la IA
     cursor = db.cursor()
     ejecutar_query(cursor, """
-        SELECT fecha, dia_del_ciclo, animo, sintomas 
+        SELECT fecha, dia_del_ciclo, animo, sintomas, temperatura_basal 
         FROM registros_diarios 
         WHERE user_id = ?
         ORDER BY fecha DESC 
@@ -879,7 +1264,8 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
         "Eres una consejera de bienestar menstrual empática, cercana y enfocada en nutrición y salud mental. "
         "Te comunicas en un tono de amiga comprensiva y sutilmente tierno, usando emojis de forma moderada. "
         "Tu objetivo es dar una respuesta corta, directa y de apoyo, evitando halagos exagerados o palabras empalagosas. "
-        "No hables sobre fertilidad o embarazo."
+        "Si la usuaria está en su fase ovulatoria (aprox. días 11 al 16), infórmale sutilmente que se encuentra en su ventana de alta fertilidad. Mantén el tono empático, informativo y no empalagoso. "
+        "Considera en tu análisis la temperatura basal reportada para identificar patrones de ovulación según el método sintotérmico."
     )
     
     user_prompt = (
@@ -909,6 +1295,64 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
             "mensaje": f"Hola hermosa 🌸. Vi que estás en el día {dia_actual} y te has sentido {animo_predominante.lower()}. "
                        f"Recuerda escuchar a tu cuerpo y descansar. ¡Pronto tendré más consejitos mágicos para ti! ✨"
         }
+
+@app.get("/api/pronostico_mensual")
+def pronostico_mensual(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    cursor = db.cursor()
+    ejecutar_query(cursor, """
+        SELECT fecha, dia_del_ciclo, flujo, animo, sintomas, temperatura_basal 
+        FROM registros_diarios 
+        WHERE user_id = ? 
+        ORDER BY fecha DESC LIMIT 60
+    """, (current_user["id"],))
+    rows = cursor.fetchall()
+    
+    if len(rows) < 3:
+        raise HTTPException(status_code=400, detail="Necesito al menos 3 días de registros para poder analizar tus patrones y darte un buen pronóstico. ¡Sigue registrando tu magia! ✨")
+        
+    resumen_datos = "Historial de los últimos 60 días:\n"
+    for r in reversed(rows):
+        resumen_datos += f"- Día {r['dia_del_ciclo']} ({r['fecha']}): Flujo {r['flujo']}, Ánimo {r['animo']}, Síntomas: {r['sintomas']}, Temp: {r['temperatura_basal']}°C\n"
+        
+    system_instruction = (
+        "Eres Lunita, una experta en endocrinología femenina y bienestar cíclico. La usuaria te enviará un resumen de sus últimos registros. "
+        "Tu misión es analizar sus patrones (síntomas, flujo, temperatura, emociones) y darle un pronóstico para su próximo mes.\n"
+        "REGLAS:\n"
+        "Basa tu análisis estrictamente en procesos biológicos reales (fluctuaciones de estrógeno, progesterona, testosterona).\n"
+        "Utiliza el método sintotérmico: un aumento sostenido de la temperatura basal junto con flujo tipo 'clara de huevo' confirma la ventana de máxima fertilidad y la ovulación.\n"
+        "Explica qué puede esperar hormonalmente en las próximas semanas considerando cómo se ha sentido últimamente.\n"
+        "Mantén el tono de 'amiga experta': empático, directo y fácil de entender, sin ser excesivamente clínica ni empalagosa.\n"
+        "Tu respuesta DEBE ser un JSON válido con las claves: analisis_patrones (qué notaste de sus datos) y pronostico_hormonal (qué esperar este mes). "
+        "Los valores deben ser texto limpio, sin diccionarios anidados ni corchetes."
+    )
+    
+    try:
+        if not client:
+            raise Exception("Gemini API Client no configurado.")
+            
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=system_instruction + "\n\n" + resumen_datos,
+        )
+        
+        texto_crudo = response.text.strip()
+        match = re.search(r'\{.*\}', texto_crudo, re.DOTALL)
+        if match:
+            texto_json = match.group(0)
+        else:
+            texto_json = texto_crudo
+            
+        pronostico_json = json.loads(texto_json)
+        
+        return {
+            "analisis_patrones": pronostico_json.get("analisis_patrones", "No pude generar un análisis en este momento."),
+            "pronostico_hormonal": pronostico_json.get("pronostico_hormonal", "Sigue registrando para darte un mejor pronóstico.")
+        }
+    except Exception as e:
+        print(f"Error generando pronóstico con Gemini: {e}")
+        if 'texto_crudo' in locals():
+            print(f"Texto crudo: {texto_crudo}")
+        raise HTTPException(status_code=500, detail="Ups, las estrellas se han cruzado y no pude generar tu pronóstico ahora mismo. Intenta más tarde. 🌟")
 
 @app.get("/api/notificaciones")
 def obtener_notificaciones(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -1048,3 +1492,206 @@ def obtener_prediccion(db: sqlite3.Connection = Depends(get_db), current_user: d
     fechas_prediccion = [(proximo_periodo_inicio + timedelta(days=i)).isoformat() for i in range(dias_sombreados)]
     
     return {"fechas": fechas_prediccion}
+
+# --- WEB PUSH NOTIFICATIONS ---
+
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "./private_key.pem")
+VAPID_CLAIMS = {
+    "sub": f"mailto:{os.getenv('EMAIL_USER', 'admin@example.com')}"
+}
+
+class PushSubscription(BaseModel):
+    endpoint: str
+    expirationTime: Optional[int] = None
+    keys: dict
+
+@app.get("/api/notificaciones/vapid-public-key")
+def get_vapid_public_key():
+    if not VAPID_PUBLIC_KEY:
+        raise HTTPException(status_code=500, detail="VAPID_PUBLIC_KEY no configurado en servidor")
+    return {"public_key": VAPID_PUBLIC_KEY}
+
+@app.post("/api/notificaciones/suscribir")
+def suscribir_push(sub: PushSubscription, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    cursor = db.cursor()
+    try:
+        ejecutar_query(cursor, "UPDATE usuarios SET push_subscription = ? WHERE id = ?", (json.dumps(sub.model_dump()), current_user["id"]))
+        db.commit()
+        return {"mensaje": "Suscripción push guardada con éxito 🔔✨"}
+    except Exception as e:
+        db.rollback()
+        print(f"Error al guardar suscripción push: {e}")
+        raise HTTPException(status_code=500, detail="No se pudo guardar la suscripción")
+
+def enviar_notificacion_push(user_id: int, titulo: str, mensaje: str, db: sqlite3.Connection):
+    cursor = db.cursor()
+    ejecutar_query(cursor, "SELECT push_subscription FROM usuarios WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    
+    if not row or not row["push_subscription"]:
+        print(f"Usuario {user_id} no tiene suscripción push configurada.")
+        return False
+        
+    try:
+        sub_info = json.loads(row["push_subscription"])
+        payload = json.dumps({
+            "title": titulo,
+            "body": mensaje,
+            "icon": "/icon-192x192.png",
+            "badge": "/icon-192x192.png"
+        })
+        
+        webpush(
+            subscription_info=sub_info,
+            data=payload,
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims=VAPID_CLAIMS
+        )
+        print(f"Notificación Push enviada exitosamente al usuario {user_id}")
+        return True
+    except WebPushException as ex:
+        print(f"Excepción Web Push para el usuario {user_id}: {repr(ex)}")
+        if ex.response and ex.response.json():
+            print(f"Detalles: {ex.response.json()}")
+        return False
+    except Exception as e:
+        print(f"Error desconocido al enviar Web Push a usuario {user_id}: {e}")
+        return False
+
+# --- REPORTE MEDICO Y MODO PAREJA ---
+
+@app.get("/api/reporte/pdf")
+def generar_reporte_pdf(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    cursor = db.cursor()
+    # Últimos 90 días
+    hace_90_dias = (date.today() - timedelta(days=90)).isoformat()
+    ejecutar_query(cursor, """
+        SELECT fecha, dia_del_ciclo, flujo, sintomas, animo 
+        FROM registros_diarios 
+        WHERE user_id = ? AND fecha >= ?
+        ORDER BY fecha DESC
+    """, (current_user["id"], hace_90_dias))
+    rows = cursor.fetchall()
+    
+    html_content = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: sans-serif; color: #333; }}
+            h1 {{ color: #B28DFF; text-align: center; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #F8F0FF; color: #5C4B62; }}
+        </style>
+    </head>
+    <body>
+        <h1>Reporte de Salud - Lunita 🌙</h1>
+        <p><strong>Usuaria:</strong> {current_user['username']}</p>
+        <p><strong>Fecha de Emisión:</strong> {date.today().isoformat()}</p>
+        <p>A continuación se detallan los registros de los últimos 3 meses.</p>
+        <table>
+            <tr>
+                <th>Fecha</th>
+                <th>Día del Ciclo</th>
+                <th>Flujo</th>
+                <th>Ánimo</th>
+                <th>Síntomas</th>
+            </tr>
+    """
+    for r in rows:
+        html_content += f"""
+            <tr>
+                <td>{r['fecha']}</td>
+                <td>{r['dia_del_ciclo']}</td>
+                <td>{r['flujo']}</td>
+                <td>{r['animo']}</td>
+                <td>{r['sintomas']}</td>
+            </tr>
+        """
+    html_content += """
+        </table>
+    </body>
+    </html>
+    """
+    
+    try:
+        pdf_bytes = weasyprint.HTML(string=html_content).write_pdf()
+        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=Reporte_Lunita.pdf"})
+    except Exception as e:
+        print(f"Error generando PDF: {e}")
+        raise HTTPException(status_code=500, detail="No se pudo generar el PDF. Verifica que GTK esté instalado en tu sistema.")
+
+@app.post("/api/pareja/generar")
+def generar_token_pareja(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    cursor = db.cursor()
+    token = secrets.token_urlsafe(16)
+    ejecutar_query(cursor, "UPDATE usuarios SET token_pareja = ? WHERE id = ?", (token, current_user["id"]))
+    db.commit()
+    return {"token": token}
+
+@app.get("/pareja/{token}", response_class=HTMLResponse)
+def vista_pareja(token: str, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    ejecutar_query(cursor, "SELECT id, username FROM usuarios WHERE token_pareja = ?", (token,))
+    user = cursor.fetchone()
+    if not user:
+        return HTMLResponse("<h1>Enlace mágico no encontrado o expirado ✨</h1>", status_code=404)
+        
+    ejecutar_query(cursor, """
+        SELECT dia_del_ciclo, animo 
+        FROM registros_diarios 
+        WHERE user_id = ? 
+        ORDER BY fecha DESC LIMIT 1
+    """, (user["id"],))
+    registro = cursor.fetchone()
+    
+    if not registro:
+        return HTMLResponse(f"<h1>Hola. {user['username']} aún no ha registrado sus días en Lunita. 🌙</h1>")
+        
+    dia = registro["dia_del_ciclo"]
+    animo = registro["animo"]
+    
+    # Lógica simple
+    fase = "Fase desconocida"
+    mensaje = "Dale mucho amor."
+    if 1 <= dia <= 5:
+        fase = "Menstrual 🩸"
+        mensaje = "Está en sus días de descanso. Necesita mimitos, calorcito y mucha comprensión."
+    elif 6 <= dia <= 13:
+        fase = "Folicular 🌸"
+        mensaje = "Su energía va en aumento. ¡Excelente momento para planes divertidos y activos!"
+    elif 14 <= dia <= 16:
+        fase = "Ovulatoria ✨"
+        mensaje = "Está en su pico de energía y sociabilidad. Se siente radiante."
+    else:
+        fase = "Lútea 🍂"
+        mensaje = "Su energía empieza a bajar. Puede estar más sensible, necesita paciencia y apoyo."
+
+    html_content = f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Lunita - Modo Pareja</title>
+        <style>
+            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #F8F0FF 0%, #E8DFF5 100%); display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: #5C4B62; }}
+            .card {{ background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(178,141,255,0.2); text-align: center; max-width: 400px; width: 90%; }}
+            h1 {{ color: #B28DFF; margin-bottom: 5px; }}
+            .fase {{ font-size: 1.5rem; font-weight: bold; margin: 20px 0; color: #FFAAA6; }}
+            .mensaje {{ font-size: 1.1rem; line-height: 1.5; margin-bottom: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>Lunita 🌙</h1>
+            <p>El estado actual de <strong>{user['username']}</strong> es:</p>
+            <div class="fase">{fase}</div>
+            <p><strong>Ánimo reciente:</strong> {animo}</p>
+            <div class="mensaje">{mensaje}</div>
+            <p style="font-size: 0.8rem; color: #999;">Esta es una vista segura. No se muestran datos clínicos.</p>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
