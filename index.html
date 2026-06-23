@@ -1993,10 +1993,26 @@
                 
                 resultsDiv.innerHTML = `
                     <div class="consejo-item-card" style="margin-top: 15px;">
+                        <div class="consejo-icon">🥑</div>
+                        <div class="consejo-content">
+                            <h4>Nutrición Consciente</h4>
+                            <p>${data.nutricion}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="consejo-item-card">
+                        <div class="consejo-icon">🧘‍♀️</div>
+                        <div class="consejo-content">
+                            <h4>Movimiento Saludable</h4>
+                            <p>${data.ejercicio}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="consejo-item-card">
                         <div class="consejo-icon">✨</div>
                         <div class="consejo-content">
-                            <h4>Mensaje de Lunita para ti</h4>
-                            <p>${data.mensaje}</p>
+                            <h4>Bienestar Mental</h4>
+                            <p>${data.salud_mental}</p>
                         </div>
                     </div>
                 `;

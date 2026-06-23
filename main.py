@@ -1289,18 +1289,20 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
 
     # 3. Construir el prompt para Gemini
     system_instruction = (
-        "Eres una consejera de bienestar menstrual empática, cercana y enfocada en nutrición y salud mental. "
-        "Te comunicas en un tono de amiga comprensiva y sutilmente tierno, usando emojis de forma moderada. "
-        "Tu objetivo es dar una respuesta corta, directa y de apoyo, evitando halagos exagerados o palabras empalagosas. "
-        "Si la usuaria está en su fase ovulatoria (aprox. días 11 al 16), infórmale sutilmente que se encuentra en su ventana de alta fertilidad. Mantén el tono empático, informativo y no empalagoso. "
-        "Considera en tu análisis la temperatura basal reportada para identificar patrones de ovulación según el método sintotérmico."
+        "Eres una consejera de bienestar menstrual experta, empática y con rigor científico. "
+        "Te comunicas en un tono de amiga comprensiva, no empalagosa, usando emojis con moderación. "
+        "Recibirás el estado actual de la usuaria y debes proporcionar consejos claros y accionables divididos estrictamente en tres categorías: "
+        "nutrición, ejercicio, y salud mental. "
+        "Si la usuaria está en su fase ovulatoria (aprox. días 11 al 16), infórmale sutilmente que se encuentra en su ventana de alta fertilidad. "
+        "Considera en tu análisis la temperatura basal reportada para identificar patrones de ovulación según el método sintotérmico. "
+        "IMPORTANTE: Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con las claves exactas: 'nutricion', 'ejercicio' y 'salud_mental'. No devuelvas ningún otro texto ni formato markdown."
     )
     
     user_prompt = (
         f"Datos recientes de la usuaria: Está en el día {dia_actual} de su ciclo menstrual. "
         f"Su estado de ánimo predominante en estos días ha sido '{animo_predominante}'. "
         f"Sus síntomas más frecuentes son: '{sintoma_predominante}'. "
-        "Por favor, dale un consejo de autocuidado o nutrición adecuado para esta fase de su ciclo."
+        "Genera los 3 consejos (nutricion, ejercicio, salud_mental) en formato JSON puro."
     )
 
     try:
@@ -1312,16 +1314,24 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
+            config=genai.types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
         )
-        mensaje_ia = response.text.strip()
         
-        return {"mensaje": mensaje_ia}
-    except Exception as e:
-        # Fallback en caso de que haya un error
-        print(f"Error generando respuesta con Gemini: {e}")
+        # Como forzamos application/json, parseamos el texto
+        data = json.loads(response.text.strip())
         return {
-            "mensaje": f"Hola hermosa 🌸. Vi que estás en el día {dia_actual} y te has sentido {animo_predominante.lower()}. "
-                       f"Recuerda escuchar a tu cuerpo y descansar. ¡Pronto tendré más consejitos mágicos para ti! ✨"
+            "nutricion": data.get("nutricion", "No hay consejo disponible."),
+            "ejercicio": data.get("ejercicio", "No hay consejo disponible."),
+            "salud_mental": data.get("salud_mental", "No hay consejo disponible.")
+        }
+    except Exception as e:
+        print(f"Error generando respuesta con Gemini en Consejera: {e}")
+        return {
+            "nutricion": f"Hola hermosa 🌸. Vi que estás en el día {dia_actual}. Mantente hidratada y come algo ligero.",
+            "ejercicio": "Escucha a tu cuerpo y haz movimiento suave si te sientes cómoda.",
+            "salud_mental": f"Te has sentido {animo_predominante.lower()}. Recuerda ser amable contigo misma hoy. ✨"
         }
 
 @app.get("/api/pronostico_mensual")
