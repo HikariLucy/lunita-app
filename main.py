@@ -1336,6 +1336,8 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
 
 @app.get("/api/pronostico_mensual")
 def pronostico_mensual(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    print(f"DEBUG: Endpoint pronostico llamado para usuario {current_user['id']}")
+    
     cursor = db.cursor()
     ejecutar_query(cursor, """
         SELECT fecha, dia_del_ciclo, flujo, animo, sintomas, temperatura_basal 
@@ -1371,16 +1373,13 @@ def pronostico_mensual(db: sqlite3.Connection = Depends(get_db), current_user: d
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=system_instruction + "\n\n" + resumen_datos,
+            config=genai.types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
         )
         
         texto_crudo = response.text.strip()
-        match = re.search(r'\{.*\}', texto_crudo, re.DOTALL)
-        if match:
-            texto_json = match.group(0)
-        else:
-            texto_json = texto_crudo
-            
-        pronostico_json = json.loads(texto_json)
+        pronostico_json = json.loads(texto_crudo)
         
         return {
             "analisis_patrones": pronostico_json.get("analisis_patrones", "No pude generar un análisis en este momento."),

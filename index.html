@@ -1163,7 +1163,7 @@
             
             <button onclick="buscarConsejosAutomatico()" class="btn btn-magic" style="width: 100%; margin-bottom: 20px; font-size: 1.1rem; padding: 15px;">Consultar mi Estado de Hoy 🌙✨</button>
             
-            <button onclick="descubrirPronosticoMensual()" class="btn btn-purple" style="width: 100%; margin-bottom: 20px;">🔮 Descubrir el pronóstico de mi mes</button>
+            <button id="btnPronostico" onclick="descubrirPronosticoMensual()" class="btn btn-purple" style="width: 100%; margin-bottom: 20px; position: relative;">🔮 Descubrir el pronóstico de mi mes</button>
 
             <!-- Badge de la Fase Menstrual -->
             <div id="faseBadgeContainer" class="fase-badge-container">
@@ -2023,7 +2023,13 @@
         }
 
         async function descubrirPronosticoMensual() {
-            document.getElementById("pronosticoModal").style.display = "flex";
+            const btn = document.getElementById("btnPronostico");
+            const originalText = btn.innerHTML;
+            
+            // UI Feedback inicial
+            btn.disabled = true;
+            btn.innerHTML = `Analizando tu magia... 🔮 <div class="spinner" style="display:inline-block; width:15px; height:15px; border:2px solid #fff; border-top:2px solid transparent; border-radius:50%; animation: spin 1s linear infinite; vertical-align: middle; margin-left: 8px;"></div>`;
+            
             const content = document.getElementById("pronosticoContent");
             content.innerHTML = `
                 <div class="empty-state">
@@ -2038,7 +2044,7 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error("No se pudo obtener el pronóstico. Intenta más tarde.");
+                    throw new Error("No pudimos generar el pronóstico hoy, intenta más tarde.");
                 }
                 
                 const data = await response.json();
@@ -2048,24 +2054,29 @@
                         <div class="consejo-icon">📝</div>
                         <div class="consejo-content">
                             <h4>Tus Patrones Recientes</h4>
-                            <p>${data.analisis_patrones}</p>
+                            <p>${data.analisis_patrones || 'No pudimos analizar tus patrones. ¡Sigue registrando tu magia!'}</p>
                         </div>
                     </div>
                     <div class="consejo-item-card" style="animation-delay: 0.1s; margin-top: 15px;">
                         <div class="consejo-icon">🌙</div>
                         <div class="consejo-content">
                             <h4>Pronóstico Hormonal de este Mes</h4>
-                            <p>${data.pronostico_hormonal}</p>
+                            <p>${data.pronostico_hormonal || 'Sigue registrando para predecir tus futuros meses.'}</p>
                         </div>
                     </div>
                 `;
+                
+                // Mostrar el modal solo cuando esté listo
+                document.getElementById("pronosticoModal").style.display = "flex";
+                
             } catch (error) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">⚠️</div>
-                        <p>${error.message}</p>
-                    </div>
-                `;
+                console.error("Error en pronóstico:", error);
+                // Si hay error, mostramos notificación y no abrimos el modal
+                showNotification(error.message, "error");
+            } finally {
+                // Restaurar botón
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             }
         }
 
