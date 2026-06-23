@@ -2067,7 +2067,7 @@
                 `;
                 
                 // Mostrar el modal solo cuando esté listo
-                document.getElementById("pronosticoModal").style.display = "flex";
+                document.getElementById("pronosticoModal").classList.add("show");
                 
             } catch (error) {
                 console.error("Error en pronóstico:", error);
@@ -2082,7 +2082,9 @@
 
         function cerrarModalPronostico(e) {
             if (e) e.preventDefault();
-            document.getElementById("pronosticoModal").style.display = "none";
+            const modal = document.getElementById("pronosticoModal");
+            modal.classList.remove("show");
+            modal.style.display = ""; // Limpiar cualquier display inline
         }
 
 
