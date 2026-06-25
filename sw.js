@@ -1,3 +1,56 @@
+const CACHE_NAME = 'lunita-cache-v1';
+const urlsToCache = [
+    '/',
+    '/index.html',
+    '/manifest.json',
+    '/icon-192x192.png',
+    '/icon-512x512.png',
+    'https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap',
+    'https://cdn.jsdelivr.net/npm/chart.js',
+    'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'
+];
+
+self.addEventListener('install', event => {
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then(cache => {
+                return cache.addAll(urlsToCache);
+            })
+    );
+});
+
+self.addEventListener('fetch', event => {
+    // Only intercept GET requests
+    if (event.request.method !== 'GET') return;
+    
+    // Don't intercept API calls
+    if (event.request.url.includes('/api/')) return;
+
+    event.respondWith(
+        caches.match(event.request)
+            .then(response => {
+                if (response) {
+                    return response;
+                }
+                return fetch(event.request).then(
+                    function(response) {
+                        if(!response || response.status !== 200 || response.type !== 'basic') {
+                            return response;
+                        }
+                        var responseToCache = response.clone();
+                        caches.open(CACHE_NAME)
+                            .then(function(cache) {
+                                cache.put(event.request, responseToCache);
+                            });
+                        return response;
+                    }
+                ).catch(() => {
+                    // Ignorar errores de fetch si estamos offline (los manejamos en index.html)
+                });
+            })
+    );
+});
+
 self.addEventListener('push', function(event) {
     if (event.data) {
         try {

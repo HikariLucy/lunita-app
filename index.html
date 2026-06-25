@@ -1891,6 +1891,61 @@
 
 
 
+        window.addEventListener('online', sincronizarPendientes);
+
+        async function sincronizarPendientes() {
+            const pendientesStr = localStorage.getItem('lunita_pendientes');
+            if (!pendientesStr) return;
+            
+            let pendientes = [];
+            try {
+                pendientes = JSON.parse(pendientesStr);
+            } catch (e) {
+                localStorage.removeItem('lunita_pendientes');
+                return;
+            }
+
+            if (pendientes.length === 0) return;
+
+            showNotification("Conexión restaurada. Sincronizando tus registros pendientes... 🌙✨", "info");
+
+            const pendientesRestantes = [];
+            let algunExito = false;
+
+            for (const payload of pendientes) {
+                try {
+                    const response = await fetch(`${API_URL}/api/registros`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            ...getAuthHeaders()
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (response.ok) {
+                        algunExito = true;
+                    } else {
+                        pendientesRestantes.push(payload);
+                    }
+                } catch (error) {
+                    pendientesRestantes.push(payload);
+                }
+            }
+
+            if (pendientesRestantes.length > 0) {
+                localStorage.setItem('lunita_pendientes', JSON.stringify(pendientesRestantes));
+            } else {
+                localStorage.removeItem('lunita_pendientes');
+            }
+
+            if (algunExito) {
+                showNotification("Registros sincronizados con éxito 💖", "success");
+                cargarHistorial();
+                renderizarGrafico();
+            }
+        }
+
         // Al cargar la página
         document.addEventListener("DOMContentLoaded", () => {
             const token = localStorage.getItem("lunita_token");
@@ -1969,11 +2024,39 @@
             }
         }
 
+        const consejosBase = {
+            "Menstrual": `🥑 **Nutrición:** Mantente hidratada y toma infusiones calientes. Los alimentos ricos en hierro como espinacas o lentejas te darán un abrazo por dentro.\n\n🧘‍♀️ **Movimiento:** Descansa. Si sientes ganas, estiramientos suaves o yoga restaurativo.\n\n✨ **Salud Mental:** Es tu momento de introspección. Sé muy compasiva contigo misma y permítete pausar.`,
+            "Folicular": `🥑 **Nutrición:** Tu energía está volviendo. Alimentos frescos, ensaladas y proteínas ligeras apoyarán tu vitalidad.\n\n🧘‍♀️ **Movimiento:** ¡A mover el cuerpo! Cardio, baile o salir a caminar a buen ritmo.\n\n✨ **Salud Mental:** Tu creatividad está por las nubes. ¡Aprovecha para planear nuevos proyectos!`,
+            "Ovulatoria": `🥑 **Nutrición:** Las verduras crujientes y alimentos ricos en fibra te ayudarán a procesar el pico de estrógenos.\n\n🧘‍♀️ **Movimiento:** Estás en tu pico de energía. Entrenamientos intensos, pesas o deportes en equipo.\n\n✨ **Salud Mental:** ¡Magnética! Es un momento excelente para socializar, comunicarte y brillar.`,
+            "Lútea": `🥑 **Nutrición:** Puede que tengas antojitos. Opta por carbohidratos complejos como camote o avena para estabilizar el azúcar.\n\n🧘‍♀️ **Movimiento:** Baja el ritmo poco a poco. Pilates o caminatas relajantes.\n\n✨ **Salud Mental:** Tu cuerpo se prepara para soltar. Es normal estar un poco más sensible, escúchate y pon límites si es necesario.`
+        };
+
         // 4. Buscar consejos de bienestar (GET)
         async function buscarConsejosAutomatico() {
             const resultsDiv = document.getElementById("consejosResults");
             const faseBadgeContainer = document.getElementById("faseBadgeContainer");
-            
+
+            if (!navigator.onLine) {
+                showNotification('Estás en Modo Offline 🌙. Aquí tienes tus consejos base.', 'info');
+                faseBadgeContainer.style.display = "none";
+                
+                let faseStr = document.getElementById("estadoFase").textContent || "";
+                let faseKey = "Menstrual";
+                if (faseStr.includes("Folicular")) faseKey = "Folicular";
+                if (faseStr.includes("Ovulatoria")) faseKey = "Ovulatoria";
+                if (faseStr.includes("Lútea")) faseKey = "Lútea";
+                
+                let consejoHtml = consejosBase[faseKey].replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                
+                resultsDiv.innerHTML = `
+                    <div style="background-color: #f1f3f4; padding: 20px; border-radius: 15px; margin-top: 15px; border-left: 5px solid #9e9e9e; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                        <span style="background-color: #9e9e9e; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8em; font-weight: 600; display: inline-block; margin-bottom: 15px; letter-spacing: 0.5px;">Modo Offline</span>
+                        <div style="line-height: 1.6; font-size: 0.95em; color: #444;">${consejoHtml}</div>
+                    </div>
+                `;
+                return;
+            }
+
             faseBadgeContainer.style.display = "none";
             resultsDiv.innerHTML = `
                 <div class="empty-state">
@@ -1991,33 +2074,37 @@
                     throw new Error("No se pudo obtener el consejo.");
                 }
                 
-                const data = await response.json();
-                
                 resultsDiv.innerHTML = `
-                    <div class="consejo-item-card" style="margin-top: 15px;">
-                        <div class="consejo-icon">🥑</div>
-                        <div class="consejo-content">
-                            <h4>Nutrición Consciente</h4>
-                            <p>${data.nutricion}</p>
-                        </div>
-                    </div>
-                    
-                    <div class="consejo-item-card">
-                        <div class="consejo-icon">🧘‍♀️</div>
-                        <div class="consejo-content">
-                            <h4>Movimiento Saludable</h4>
-                            <p>${data.ejercicio}</p>
-                        </div>
-                    </div>
-                    
-                    <div class="consejo-item-card">
-                        <div class="consejo-icon">✨</div>
-                        <div class="consejo-content">
-                            <h4>Bienestar Mental</h4>
-                            <p>${data.salud_mental}</p>
-                        </div>
+                    <div style="background-color: white; padding: 25px; border-radius: 15px; margin-top: 15px; line-height: 1.6; color: #5C4B62; box-shadow: 0 5px 20px rgba(178, 141, 255, 0.15); border: 1px solid rgba(178, 141, 255, 0.3);">
+                        <span style="background: linear-gradient(135deg, #B28DFF 0%, #FFAAA6 100%); color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8em; font-weight: 600; display: inline-block; margin-bottom: 15px; letter-spacing: 0.5px; box-shadow: 0 2px 5px rgba(178, 141, 255, 0.3);">Lunita Inteligente ✨</span>
+                        <div id="streamingContent" style="font-size: 0.95em;"></div>
                     </div>
                 `;
+                
+                const streamContent = document.getElementById("streamingContent");
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let markdownContent = "";
+
+                const renderMarkdown = (text) => {
+                    return text
+                        .replace(/\n/g, '<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                        .replace(/^### (.*$)/gim, '<h4 style="color: #B28DFF; margin-top: 15px; margin-bottom: 8px;">$1</h4>')
+                        .replace(/^## (.*$)/gim, '<h3 style="color: #B28DFF; margin-top: 15px; margin-bottom: 8px;">$1</h3>')
+                        .replace(/^# (.*$)/gim, '<h2 style="color: #B28DFF; margin-top: 15px; margin-bottom: 8px;">$1</h2>');
+                };
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    markdownContent += chunk;
+                    streamContent.innerHTML = renderMarkdown(markdownContent);
+                }
+
             } catch (error) {
                 console.error("Error en consejera:", error);
                 resultsDiv.innerHTML = `<p style="color:red">Ocurrió un error. Intenta más tarde.</p>`;
@@ -2025,6 +2112,10 @@
         }
 
         async function descubrirPronosticoMensual() {
+            if (!navigator.onLine) {
+                showNotification('Para hablar con Lunita y pedir análisis, necesitas un poquito de internet. ¡Inténtalo cuando te conectes a Wi-Fi! ✨', 'info');
+                return;
+            }
             const btn = document.getElementById("btnPronostico");
             const originalText = btn.innerHTML;
             
@@ -2140,6 +2231,24 @@
                 tomo_pastilla, tomo_vitaminas, durmio_bien, temperatura_basal
             };
 
+            if (!navigator.onLine) {
+                let pendientes = [];
+                try {
+                    pendientes = JSON.parse(localStorage.getItem('lunita_pendientes')) || [];
+                } catch (e) {}
+                pendientes.push(payload);
+                localStorage.setItem('lunita_pendientes', JSON.stringify(pendientes));
+                showNotification("No tienes conexión. Tus datos se guardarán localmente y se sincronizarán al volver a conectarte 🌙", "info");
+                
+                document.getElementById("dia_del_ciclo").value = "";
+                document.getElementById("sintomas").value = "";
+                document.getElementById("temperatura_basal").value = "";
+                document.getElementById("flujo").value = "Ninguno";
+                document.getElementById("animo_feliz").checked = true;
+                document.getElementById("relaciones").checked = false;
+                return;
+            }
+
             try {
                 const response = await fetch(`${API_URL}/api/registros`, {
                     method: "POST",
@@ -2170,7 +2279,24 @@
                 renderizarGrafico();
 
             } catch (error) {
-                showNotification(error.message, "error");
+                if (error instanceof TypeError || !navigator.onLine) {
+                    let pendientes = [];
+                    try {
+                        pendientes = JSON.parse(localStorage.getItem('lunita_pendientes')) || [];
+                    } catch (e) {}
+                    pendientes.push(payload);
+                    localStorage.setItem('lunita_pendientes', JSON.stringify(pendientes));
+                    showNotification("No tienes conexión. Tus datos se guardarán localmente y se sincronizarán al volver a conectarte 🌙", "info");
+                    
+                    document.getElementById("dia_del_ciclo").value = "";
+                    document.getElementById("sintomas").value = "";
+                    document.getElementById("temperatura_basal").value = "";
+                    document.getElementById("flujo").value = "Ninguno";
+                    document.getElementById("animo_feliz").checked = true;
+                    document.getElementById("relaciones").checked = false;
+                } else {
+                    showNotification(error.message, "error");
+                }
             }
         }
 

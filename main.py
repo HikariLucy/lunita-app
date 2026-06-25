@@ -1273,7 +1273,9 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
     rows = cursor.fetchall()
     
     if not rows:
-        return {"mensaje": "¡Aún necesito conocerte un poquito más! Registra un par de días para darte los mejores consejos. 💖"}
+        def simple_stream():
+            yield "¡Aún necesito conocerte un poquito más! Registra un par de días para darte los mejores consejos. 💖"
+        return StreamingResponse(simple_stream(), media_type="text/plain")
     
     # 2. Procesar los datos recientes
     dia_actual = rows[0]['dia_del_ciclo']
@@ -1291,48 +1293,40 @@ def consejera_predictiva(db: sqlite3.Connection = Depends(get_db), current_user:
     system_instruction = (
         "Eres una consejera de bienestar menstrual experta, empática y con rigor científico. "
         "Te comunicas en un tono de amiga comprensiva, no empalagosa, usando emojis con moderación. "
-        "Recibirás el estado actual de la usuaria y debes proporcionar consejos claros y accionables divididos estrictamente en tres categorías: "
-        "nutrición, ejercicio, y salud mental. "
+        "Recibirás el estado actual de la usuaria y debes proporcionar consejos claros y accionables divididos en tres áreas: "
+        "Nutrición Consciente, Movimiento Saludable, y Bienestar Mental. "
         "Si la usuaria está en su fase ovulatoria (aprox. días 11 al 16), infórmale sutilmente que se encuentra en su ventana de alta fertilidad. "
-        "Considera en tu análisis la temperatura basal reportada para identificar patrones de ovulación según el método sintotérmico. "
-        "IMPORTANTE: Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con las claves exactas: 'nutricion', 'ejercicio' y 'salud_mental'. No devuelvas ningún otro texto ni formato markdown."
+        "Considera en tu análisis la temperatura basal reportada para identificar patrones de ovulación. "
+        "IMPORTANTE: Formatea tu respuesta usando Markdown. Usa títulos (##) para cada una de las tres áreas y acompáñalos con un emoji (ej. ## 🥑 Nutrición Consciente). Escribe párrafos cortos y fáciles de leer. NO devuelvas JSON."
     )
     
     user_prompt = (
         f"Datos recientes de la usuaria: Está en el día {dia_actual} de su ciclo menstrual. "
         f"Su estado de ánimo predominante en estos días ha sido '{animo_predominante}'. "
         f"Sus síntomas más frecuentes son: '{sintoma_predominante}'. "
-        "Genera los 3 consejos (nutricion, ejercicio, salud_mental) en formato JSON puro."
+        "Genera los 3 consejos mágicos para hoy."
     )
 
-    try:
-        # 4. Generar respuesta con Gemini
-        if not client:
-            raise Exception("No se pudo instanciar el cliente de Gemini. ¿Configuraste la API Key?")
-            
-        prompt = system_instruction + "\n\n" + user_prompt
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=genai.types.GenerateContentConfig(
-                response_mime_type="application/json"
+    def generate_stream():
+        try:
+            if not client:
+                yield "No se pudo instanciar el cliente de Gemini. ¿Configuraste la API Key?"
+                return
+                
+            prompt = system_instruction + "\n\n" + user_prompt
+            response = client.models.generate_content_stream(
+                model="gemini-2.5-flash",
+                contents=prompt
             )
-        )
-        
-        # Como forzamos application/json, parseamos el texto
-        data = json.loads(response.text.strip())
-        return {
-            "nutricion": data.get("nutricion", "No hay consejo disponible."),
-            "ejercicio": data.get("ejercicio", "No hay consejo disponible."),
-            "salud_mental": data.get("salud_mental", "No hay consejo disponible.")
-        }
-    except Exception as e:
-        print(f"Error generando respuesta con Gemini en Consejera: {e}")
-        return {
-            "nutricion": f"Hola hermosa 🌸. Vi que estás en el día {dia_actual}. Mantente hidratada y come algo ligero.",
-            "ejercicio": "Escucha a tu cuerpo y haz movimiento suave si te sientes cómoda.",
-            "salud_mental": f"Te has sentido {animo_predominante.lower()}. Recuerda ser amable contigo misma hoy. ✨"
-        }
+            
+            for chunk in response:
+                yield chunk.text
+                
+        except Exception as e:
+            print(f"Error generando respuesta con Gemini en Consejera (Stream): {e}")
+            yield f"\n\n*Nota: Tuve un pequeño problema de conexión, pero aquí tienes un consejo rápido:*\n\nHola hermosa 🌸. Vi que estás en el día {dia_actual}. Mantente hidratada, escucha a tu cuerpo y recuerda ser muy amable contigo misma hoy. ✨"
+
+    return StreamingResponse(generate_stream(), media_type="text/plain")
 
 @app.get("/api/pronostico_mensual")
 def pronostico_mensual(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
