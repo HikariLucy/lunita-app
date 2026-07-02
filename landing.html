@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunita ✨ Tu ciclo, tu magia, tu ciencia</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #FFF4F7;
+            --primary: #B28DFF;
+            --primary-hover: #9E70FF;
+            --secondary: #FFC6FF;
+            --text-dark: #4A3E4D;
+            --text-light: #7A6F80;
+            --white: #FFFFFF;
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.5);
+            --shadow: 0 8px 32px rgba(178, 141, 255, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Quicksand', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-dark);
+            overflow-x: hidden;
+        }
+
+        /* Nav */
+        nav {
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 80px 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+            color: var(--primary);
+            line-height: 1.2;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-light);
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: var(--white);
+            box-shadow: 0 4px 15px rgba(178, 141, 255, 0.4);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background-color: var(--white);
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--bg-main);
+            transform: translateY(-2px);
+        }
+
+        /* Features */
+        .features-section {
+            padding: 80px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 40px 20px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease, box-shadow 0.3s ease;
+        }
+
+        .feature-card:hover {
+            box-shadow: 0 12px 40px rgba(178, 141, 255, 0.25);
+            transform: translateY(-5px) !important;
+        }
+
+        .feature-card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+
+        .feature-card p {
+            color: var(--text-light);
+            line-height: 1.5;
+        }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(74, 62, 77, 0.5);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background: var(--white);
+            padding: 40px;
+            border-radius: 24px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            position: relative;
+            transform: scale(0.9);
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-light);
+        }
+
+        .modal-title {
+            font-size: 1.8rem;
+            color: var(--primary);
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #EEE;
+            border-radius: 12px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            border-color: var(--primary);
+        }
+        
+        .input-group select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #EEE;
+            border-radius: 12px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+            background: white;
+        }
+
+        .btn-full {
+            width: 100%;
+            margin: 10px 0 0 0;
+        }
+
+        .error-message {
+            color: #FF8B85;
+            font-size: 0.9rem;
+            text-align: center;
+            margin-top: 15px;
+            min-height: 20px;
+        }
+
+        /* Decorative blobs */
+        .blob {
+            position: absolute;
+            z-index: -1;
+            filter: blur(60px);
+            opacity: 0.6;
+        }
+
+        .blob-1 {
+            top: -100px;
+            left: -100px;
+            width: 400px;
+            height: 400px;
+            background: var(--secondary);
+            border-radius: 50%;
+        }
+
+        .blob-2 {
+            top: 200px;
+            right: -100px;
+            width: 300px;
+            height: 300px;
+            background: var(--primary);
+            border-radius: 50%;
+            opacity: 0.3;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.5rem; }
+            .hero p { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+    <nav>
+        <div class="logo">🌙 Lunita</div>
+    </nav>
+
+    <header class="hero">
+        <h1>Tu ciclo, tu magia,<br>tu ciencia ✨</h1>
+        <p>Un espacio seguro y tierno diseñado para acompañarte en cada fase de tu ciclo menstrual. Conoce tu cuerpo, conecta con tu magia interior y toma el control de tu bienestar con precisión y amor.</p>
+        <div>
+            <button class="btn btn-secondary" onclick="openModal('loginModal')">Iniciar Sesión</button>
+            <button class="btn btn-primary" onclick="openModal('registerModal')">Crear mi Cuenta Libre y Segura</button>
+        </div>
+    </header>
+
+    <section class="features-section">
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🔮</div>
+                <h3>Oráculo IA</h3>
+                <p>Tu consejera 24/7. Resuelve tus dudas y recibe consejos empáticos basados en tu ciclo actual.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🌡️</div>
+                <h3>Método Sintotérmico</h3>
+                <p>Precisión médica a tu alcance. Registra tu temperatura basal y fluidos para un seguimiento profundo.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📄</div>
+                <h3>Reporte Médico</h3>
+                <p>Exporta tu historial fácilmente a PDF para llevarlo a tus consultas ginecológicas.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🤝</div>
+                <h3>Conexión en Pareja</h3>
+                <p>Empatía compartida. Permite que tu pareja entienda tus fases y te brinde el apoyo que necesitas.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('loginModal')">&times;</span>
+            <h2 class="modal-title">¡Hola de nuevo! ✨</h2>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="input-group">
+                    <label>Usuario</label>
+                    <input type="text" id="loginUsername" required placeholder="Tu usuario mágico">
+                </div>
+                <div class="input-group">
+                    <label>Contraseña</label>
+                    <input type="password" id="loginPassword" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">Iniciar Sesión</button>
+                <div class="error-message" id="loginError"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div class="modal-overlay" id="registerModal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('registerModal')">&times;</span>
+            <h2 class="modal-title">Únete a Lunita 🌸</h2>
+            <form id="registerForm" onsubmit="handleRegister(event)">
+                <div class="input-group">
+                    <label>Usuario</label>
+                    <input type="text" id="regUsername" required placeholder="Elige un nombre">
+                </div>
+                <div class="input-group">
+                    <label>Email</label>
+                    <input type="email" id="regEmail" required placeholder="tu@correo.com">
+                </div>
+                <div class="input-group">
+                    <label>Contraseña</label>
+                    <input type="password" id="regPassword" required placeholder="••••••••">
+                </div>
+                <div class="input-group">
+                    <label>¿Tienes ciclo irregular?</label>
+                    <select id="regIrregular">
+                        <option value="false">No, soy bastante regular</option>
+                        <option value="true">Sí, mi ciclo varía</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">Crear mi Cuenta</button>
+                <div class="error-message" id="registerError"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Check if already logged in
+        if (localStorage.getItem('token')) {
+            window.location.href = '/app';
+        }
+
+        // Modals logic
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+            // Clear errors
+            document.getElementById('loginError').innerText = '';
+            document.getElementById('registerError').innerText = '';
+        }
+
+        // Close on click outside
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal-overlay')) {
+                event.target.classList.remove('active');
+            }
+        }
+
+        // Fade in animation on scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.feature-card').forEach((card) => {
+            observer.observe(card);
+        });
+
+        // API URL
+        const API_BASE = window.location.origin; // Assume same domain
+
+        // Handle Login
+        async function handleLogin(e) {
+            e.preventDefault();
+            const errorDiv = document.getElementById('loginError');
+            errorDiv.innerText = '';
+            const btn = e.target.querySelector('button');
+            const btnText = btn.innerText;
+            btn.innerText = 'Cargando...';
+
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('token', data.access_token);
+                    window.location.href = '/app';
+                } else {
+                    errorDiv.innerText = data.detail || 'Error al iniciar sesión.';
+                }
+            } catch (error) {
+                errorDiv.innerText = 'Error de conexión.';
+            } finally {
+                btn.innerText = btnText;
+            }
+        }
+
+        // Handle Registration
+        async function handleRegister(e) {
+            e.preventDefault();
+            const errorDiv = document.getElementById('registerError');
+            errorDiv.innerText = '';
+            const btn = e.target.querySelector('button');
+            const btnText = btn.innerText;
+            btn.innerText = 'Crear mi Cuenta...';
+
+            const username = document.getElementById('regUsername').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            const es_irregular = document.getElementById('regIrregular').value === 'true';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/registro`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password, es_irregular })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Registration success, log them in automatically
+                    const loginResp = await fetch(`${API_BASE}/api/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    
+                    if(loginResp.ok) {
+                        const loginData = await loginResp.json();
+                        localStorage.setItem('token', loginData.access_token);
+                        window.location.href = '/app';
+                    } else {
+                        closeModal('registerModal');
+                        openModal('loginModal');
+                    }
+                } else {
+                    errorDiv.innerText = data.detail || 'Error al registrar cuenta.';
+                }
+            } catch (error) {
+                errorDiv.innerText = 'Error de conexión.';
+            } finally {
+                btn.innerText = btnText;
+            }
+        }
+    </script>
+</body>
+</html>

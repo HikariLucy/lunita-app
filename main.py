@@ -589,7 +589,7 @@ def shutdown_event():
 
 @app.get("/")
 def raiz():
-    return FileResponse('index.html')
+    return FileResponse('landing.html')
 
 @app.get("/app", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
@@ -718,6 +718,29 @@ class Token(BaseModel):
 
 class RecuperarPassword(BaseModel):
     email: str
+
+class LoginData(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/login", response_model=Token)
+def login_json(data: LoginData, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    ejecutar_query(cursor, "SELECT * FROM usuarios WHERE username = ?", (data.username,))
+    user = cursor.fetchone()
+    
+    if not user or not verify_password(data.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario o contraseña incorrectos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["username"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/api/registro", status_code=status.HTTP_201_CREATED)
 def crear_usuario(user: UserCreate, db: sqlite3.Connection = Depends(get_db)):
